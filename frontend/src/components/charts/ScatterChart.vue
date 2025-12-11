@@ -6,9 +6,32 @@
       class="absolute top-2 right-2 bg-gray-800/90 text-gray-100 px-3 py-2 rounded-lg text-sm shadow-lg border border-gray-600"
     >
       <div class="font-medium text-yellow-400">Y = {{ crosshairStats.yValue.toFixed(1) }} 分钟</div>
-      <div class="mt-1">
-        <span class="text-green-400">{{ crosshairStats.belowCount }}</span> / {{ crosshairStats.totalCount }} 点在横线以下
-        <span class="ml-2 text-blue-400">({{ crosshairStats.belowPercent.toFixed(1) }}%)</span>
+      <!-- 单个 dataset 时显示简单统计 -->
+      <div v-if="crosshairStats.datasets.length === 1" class="mt-1">
+        <span class="text-green-400">{{ crosshairStats.datasets[0].belowCount }}</span> / {{ crosshairStats.datasets[0].totalCount }} 点在横线以下
+        <span class="ml-2 text-blue-400">({{ crosshairStats.datasets[0].belowPercent.toFixed(1) }}%)</span>
+      </div>
+      <!-- 多个 dataset 时按模型分别显示 -->
+      <div v-else class="mt-1 space-y-0.5">
+        <div
+          v-for="ds in crosshairStats.datasets"
+          :key="ds.label"
+          class="flex items-center gap-2"
+        >
+          <div
+            class="w-2 h-2 rounded-full flex-shrink-0"
+            :style="{ backgroundColor: ds.color }"
+          />
+          <span class="text-gray-300 truncate max-w-[80px]">{{ ds.label }}:</span>
+          <span class="text-green-400">{{ ds.belowCount }}</span>/<span class="text-gray-400">{{ ds.totalCount }}</span>
+          <span class="text-blue-400">({{ ds.belowPercent.toFixed(0) }}%)</span>
+        </div>
+        <!-- 总计 -->
+        <div class="flex items-center gap-2 pt-1 border-t border-gray-600 mt-1">
+          <span class="text-gray-300">总计:</span>
+          <span class="text-green-400">{{ crosshairStats.totalBelowCount }}</span>/<span class="text-gray-400">{{ crosshairStats.totalCount }}</span>
+          <span class="text-blue-400">({{ crosshairStats.totalBelowPercent.toFixed(1) }}%)</span>
+        </div>
       </div>
     </div>
   </div>
@@ -48,11 +71,20 @@ interface Props {
   height?: number
 }
 
-interface CrosshairStats {
-  yValue: number
+interface DatasetStats {
+  label: string
+  color: string
   belowCount: number
   totalCount: number
   belowPercent: number
+}
+
+interface CrosshairStats {
+  yValue: number
+  datasets: DatasetStats[]
+  totalBelowCount: number
+  totalCount: number
+  totalBelowPercent: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -67,19 +99,36 @@ const crosshairY = ref<number | null>(null)
 const crosshairStats = computed<CrosshairStats | null>(() => {
   if (crosshairY.value === null || !props.data.datasets) return null
 
+  const datasetStats: DatasetStats[] = []
+  let totalBelowCount = 0
   let totalCount = 0
-  let belowCount = 0
 
   for (const dataset of props.data.datasets) {
     if (!dataset.data) continue
+
+    let belowCount = 0
+    let dsTotal = 0
+
     for (const point of dataset.data) {
       const p = point as { x: string; y: number }
       if (typeof p.y === 'number') {
+        dsTotal++
         totalCount++
         if (p.y <= crosshairY.value) {
           belowCount++
+          totalBelowCount++
         }
       }
+    }
+
+    if (dsTotal > 0) {
+      datasetStats.push({
+        label: dataset.label || 'Unknown',
+        color: (dataset.backgroundColor as string) || 'rgba(59, 130, 246, 0.7)',
+        belowCount,
+        totalCount: dsTotal,
+        belowPercent: (belowCount / dsTotal) * 100
+      })
     }
   }
 
@@ -87,9 +136,10 @@ const crosshairStats = computed<CrosshairStats | null>(() => {
 
   return {
     yValue: crosshairY.value,
-    belowCount,
+    datasets: datasetStats,
+    totalBelowCount,
     totalCount,
-    belowPercent: (belowCount / totalCount) * 100
+    totalBelowPercent: (totalBelowCount / totalCount) * 100
   }
 })
 

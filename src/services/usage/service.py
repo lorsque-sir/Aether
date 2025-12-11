@@ -1746,7 +1746,7 @@ class UsageService:
             include_user_info: 是否包含用户信息（用于管理员多用户视图）
 
         Returns:
-            包含时间线数据点的字典
+            包含时间线数据点的字典，每个数据点包含 model 字段用于按模型区分颜色
         """
         from sqlalchemy import text
 
@@ -1764,6 +1764,7 @@ class UsageService:
                     SELECT
                         u.created_at,
                         u.user_id,
+                        u.model,
                         usr.username,
                         LAG(u.created_at) OVER (
                             PARTITION BY u.user_id
@@ -1780,6 +1781,7 @@ class UsageService:
                     SELECT
                         created_at,
                         user_id,
+                        model,
                         username,
                         EXTRACT(EPOCH FROM (created_at - prev_request_at)) / 60.0 as interval_minutes,
                         ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at) as rn
@@ -1804,6 +1806,7 @@ class UsageService:
                 SELECT
                     fi.created_at,
                     fi.user_id,
+                    fi.model,
                     fi.username,
                     fi.interval_minutes
                 FROM filtered_intervals fi
@@ -1812,12 +1815,13 @@ class UsageService:
                 ORDER BY fi.created_at
             """)
         else:
-            # 普通视图：只返回时间和间隔
+            # 普通视图：返回时间、间隔和模型信息
             sql = text(f"""
                 WITH request_intervals AS (
                     SELECT
                         u.created_at,
                         u.user_id,
+                        u.model,
                         LAG(u.created_at) OVER (
                             PARTITION BY u.user_id
                             ORDER BY u.created_at
@@ -1830,6 +1834,7 @@ class UsageService:
                 )
                 SELECT
                     created_at,
+                    model,
                     EXTRACT(EPOCH FROM (created_at - prev_request_at)) / 60.0 as interval_minutes
                 FROM request_intervals
                 WHERE prev_request_at IS NOT NULL
@@ -1848,24 +1853,33 @@ class UsageService:
         # 转换为时间线数据点
         points = []
         users_map: Dict[str, str] = {}  # user_id -> username
+        models_set: set = set()  # 收集所有出现的模型
 
         if include_user_info and not user_id:
             for row in rows:
-                created_at, row_user_id, username, interval_minutes = row
-                points.append({
+                created_at, row_user_id, model, username, interval_minutes = row
+                point_data: Dict[str, Any] = {
                     "x": created_at.isoformat(),
                     "y": round(float(interval_minutes), 2),
                     "user_id": str(row_user_id),
-                })
+                }
+                if model:
+                    point_data["model"] = model
+                    models_set.add(model)
+                points.append(point_data)
                 if row_user_id and username:
                     users_map[str(row_user_id)] = username
         else:
             for row in rows:
-                created_at, interval_minutes = row
-                points.append({
+                created_at, model, interval_minutes = row
+                point_data = {
                     "x": created_at.isoformat(),
                     "y": round(float(interval_minutes), 2)
-                })
+                }
+                if model:
+                    point_data["model"] = model
+                    models_set.add(model)
+                points.append(point_data)
 
         response: Dict[str, Any] = {
             "analysis_period_hours": hours,
@@ -1875,5 +1889,9 @@ class UsageService:
 
         if include_user_info and not user_id:
             response["users"] = users_map
+
+        # 如果有模型信息，返回模型列表
+        if models_set:
+            response["models"] = sorted(models_set)
 
         return response

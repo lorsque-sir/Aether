@@ -220,6 +220,7 @@ export interface IntervalTimelinePoint {
   x: string  // ISO 时间字符串
   y: number  // 间隔分钟数
   user_id?: string  // 用户 ID（仅 include_user_info=true 时存在）
+  model?: string  // 模型名称
 }
 
 export interface IntervalTimelineResponse {
@@ -227,6 +228,7 @@ export interface IntervalTimelineResponse {
   total_points: number
   points: IntervalTimelinePoint[]
   users?: Record<string, string>  // user_id -> username 映射（仅 include_user_info=true 时存在）
+  models?: string[]  // 出现的模型列表
 }
 
 export const cacheAnalysisApi = {

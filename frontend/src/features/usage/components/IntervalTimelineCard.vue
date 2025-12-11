@@ -2,18 +2,21 @@
   <Card class="p-4">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-semibold">{{ title }}</p>
-      <div v-if="hasMultipleUsers && userLegend.length > 0" class="flex items-center gap-2 flex-wrap justify-end text-[11px]">
+      <div v-if="displayLegendItems.length > 0" class="flex items-center gap-2 flex-wrap justify-end text-[11px]">
         <div
-          v-for="user in userLegend"
-          :key="user.id"
+          v-for="item in displayLegendItems"
+          :key="item.id"
           class="flex items-center gap-1"
         >
           <div
             class="w-2.5 h-2.5 rounded-full"
-            :style="{ backgroundColor: user.color }"
+            :style="{ backgroundColor: item.color }"
           />
-          <span class="text-muted-foreground">{{ user.name }}</span>
+          <span class="text-muted-foreground">{{ item.name }}</span>
         </div>
+        <span v-if="hiddenLegendCount > 0" class="text-muted-foreground">
+          +{{ hiddenLegendCount }} 更多
+        </span>
       </div>
     </div>
     <div v-if="loading" class="h-[160px] flex items-center justify-center">
@@ -63,8 +66,8 @@ onMounted(() => {
   loadData()
 })
 
-// 预定义的颜色列表（用于区分不同用户）
-const USER_COLORS = [
+// 预定义的颜色列表（用于区分不同用户/模型）
+const COLORS = [
   'rgba(59, 130, 246, 0.7)',   // blue
   'rgba(236, 72, 153, 0.7)',   // pink
   'rgba(34, 197, 94, 0.7)',    // green
@@ -81,21 +84,71 @@ const hasData = computed(() =>
   timelineData.value && timelineData.value.points && timelineData.value.points.length > 0
 )
 
-const hasMultipleUsers = computed(() =>
-  props.isAdmin && timelineData.value?.users && Object.keys(timelineData.value.users).length > 1
-)
-
-// 用户图例
-const userLegend = computed(() => {
-  if (!props.isAdmin || !timelineData.value?.users) return []
-
-  const users = Object.entries(timelineData.value.users)
-  return users.map(([userId, username], index) => ({
-    id: userId,
-    name: username || userId.slice(0, 8),
-    color: USER_COLORS[index % USER_COLORS.length]
-  }))
+// 判断是否有多个分组（管理员按用户分组，普通用户按模型分组）
+const hasMultipleGroups = computed(() => {
+  if (props.isAdmin) {
+    // 管理员视图：按用户分组
+    return timelineData.value?.users && Object.keys(timelineData.value.users).length > 1
+  } else {
+    // 用户视图：按模型分组
+    return timelineData.value?.models && timelineData.value.models.length > 1
+  }
 })
+
+// 图例最多显示数量
+const MAX_LEGEND_ITEMS = 6
+
+// 图例项（管理员显示用户，普通用户显示模型）
+const legendItems = computed(() => {
+  if (props.isAdmin && timelineData.value?.users) {
+    // 管理员视图：显示用户图例
+    const users = Object.entries(timelineData.value.users)
+    if (users.length <= 1) return []
+    return users.map(([userId, username], index) => ({
+      id: userId,
+      name: username || userId.slice(0, 8),
+      color: COLORS[index % COLORS.length]
+    }))
+  } else if (timelineData.value?.models && timelineData.value.models.length > 1) {
+    // 用户视图：显示模型图例
+    return timelineData.value.models.map((model, index) => ({
+      id: model,
+      name: formatModelName(model),
+      color: COLORS[index % COLORS.length]
+    }))
+  }
+  return []
+})
+
+// 显示的图例项（限制数量）
+const displayLegendItems = computed(() => {
+  return legendItems.value.slice(0, MAX_LEGEND_ITEMS)
+})
+
+// 隐藏的图例数量
+const hiddenLegendCount = computed(() => {
+  return Math.max(0, legendItems.value.length - MAX_LEGEND_ITEMS)
+})
+
+// 格式化模型名称，使其更简洁
+function formatModelName(model: string): string {
+  // 常见的简化规则
+  if (model.includes('claude')) {
+    // claude-3-5-sonnet-20241022 -> Claude 3.5 Sonnet
+    const match = model.match(/claude-(\d+)-(\d+)?-?(\w+)?/i)
+    if (match) {
+      const major = match[1]
+      const minor = match[2]
+      const variant = match[3]
+      let name = `Claude ${major}`
+      if (minor) name += `.${minor}`
+      if (variant) name += ` ${variant.charAt(0).toUpperCase() + variant.slice(1)}`
+      return name
+    }
+  }
+  // 其他模型保持原样但截断
+  return model.length > 20 ? model.slice(0, 17) + '...' : model
+}
 
 // 构建图表数据
 const chartData = computed<ChartData<'scatter'>>(() => {
@@ -105,12 +158,12 @@ const chartData = computed<ChartData<'scatter'>>(() => {
 
   const points = timelineData.value.points
 
-  // 如果是管理员且有多个用户，按用户分组
+  // 管理员视图且有多个用户：按用户分组
   if (props.isAdmin && timelineData.value.users && Object.keys(timelineData.value.users).length > 1) {
     const userIds = Object.keys(timelineData.value.users)
     const userColorMap: Record<string, string> = {}
     userIds.forEach((userId, index) => {
-      userColorMap[userId] = USER_COLORS[index % USER_COLORS.length]
+      userColorMap[userId] = COLORS[index % COLORS.length]
     })
 
     // 按用户分组数据
@@ -136,7 +189,38 @@ const chartData = computed<ChartData<'scatter'>>(() => {
     return { datasets }
   }
 
-  // 单用户或用户视图：使用主题色
+  // 用户视图且有多个模型：按模型分组
+  if (!props.isAdmin && timelineData.value.models && timelineData.value.models.length > 1) {
+    const models = timelineData.value.models
+    const modelColorMap: Record<string, string> = {}
+    models.forEach((model, index) => {
+      modelColorMap[model] = COLORS[index % COLORS.length]
+    })
+
+    // 按模型分组数据
+    const groupedData: Record<string, Array<{ x: string; y: number }>> = {}
+    for (const point of points) {
+      const model = point.model || 'unknown'
+      if (!groupedData[model]) {
+        groupedData[model] = []
+      }
+      groupedData[model].push({ x: point.x, y: point.y })
+    }
+
+    // 创建每个模型的 dataset
+    const datasets = Object.entries(groupedData).map(([model, data]) => ({
+      label: formatModelName(model),
+      data,
+      backgroundColor: modelColorMap[model] || 'rgba(59, 130, 246, 0.6)',
+      borderColor: modelColorMap[model] || 'rgba(59, 130, 246, 0.8)',
+      pointRadius: 3,
+      pointHoverRadius: 5,
+    }))
+
+    return { datasets }
+  }
+
+  // 单用户或单模型：使用主题色
   return {
     datasets: [{
       label: '请求间隔',
@@ -160,7 +244,7 @@ const chartOptions = computed<ChartOptions<'scatter'>>(() => ({
           const point = context.raw as { x: string; y: number; _originalY?: number }
           const realY = point._originalY ?? point.y
           const datasetLabel = context.dataset.label || ''
-          if (props.isAdmin && hasMultipleUsers.value) {
+          if (hasMultipleGroups.value) {
             return `${datasetLabel}: ${realY.toFixed(1)} 分钟`
           }
           return `间隔: ${realY.toFixed(1)} 分钟`

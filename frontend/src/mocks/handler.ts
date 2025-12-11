@@ -2166,7 +2166,7 @@ function generateIntervalTimelineData(
 ) {
   const now = Date.now()
   const startTime = now - hours * 60 * 60 * 1000
-  const points: Array<{ x: string; y: number; user_id?: string }> = []
+  const points: Array<{ x: string; y: number; user_id?: string; model?: string }> = []
 
   // 用户列表（用于管理员视图）
   const users = [
@@ -2174,6 +2174,14 @@ function generateIntervalTimelineData(
     { id: 'demo-user-uuid-0002', username: 'Demo User' },
     { id: 'demo-user-uuid-0003', username: 'Alice Chen' },
     { id: 'demo-user-uuid-0004', username: 'Bob Zhang' }
+  ]
+
+  // 模型列表（用于按模型区分颜色）
+  const models = [
+    'claude-sonnet-4-20250514',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    'claude-opus-4-20250514'
   ]
 
   // 生成模拟的请求间隔数据
@@ -2211,9 +2219,10 @@ function generateIntervalTimelineData(
     // 确保间隔不超过 120 分钟
     interval = Math.min(interval, 120)
 
-    const point: { x: string; y: number; user_id?: string } = {
+    const point: { x: string; y: number; user_id?: string; model?: string } = {
       x: new Date(currentTime).toISOString(),
-      y: Math.round(interval * 100) / 100
+      y: Math.round(interval * 100) / 100,
+      model: models[Math.floor(Math.random() * models.length)]
     }
 
     if (includeUserInfo) {
@@ -2231,15 +2240,20 @@ function generateIntervalTimelineData(
   // 按时间排序
   points.sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime())
 
+  // 收集出现的模型
+  const usedModels = [...new Set(points.map(p => p.model).filter(Boolean))] as string[]
+
   const response: {
     analysis_period_hours: number
     total_points: number
     points: typeof points
     users?: Record<string, string>
+    models?: string[]
   } = {
     analysis_period_hours: hours,
     total_points: points.length,
-    points
+    points,
+    models: usedModels
   }
 
   if (includeUserInfo) {
