@@ -109,6 +109,7 @@ import {
 } from '@/features/usage/composables'
 import type { PeriodValue, FilterStatusValue } from '@/features/usage/types'
 import type { UserOption } from '@/features/usage/components/UsageRecordsTable.vue'
+import { log } from '@/utils/logger'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -250,7 +251,7 @@ async function pollActiveRequests() {
       await refreshData()
     }
   } catch (error) {
-    console.error('轮询活跃请求状态失败:', error)
+    log.error('轮询活跃请求状态失败:', error)
   }
 }
 
@@ -423,7 +424,7 @@ async function exportData(format: 'csv' | 'json') {
     a.click()
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('导出失败:', error)
+    log.error('导出失败:', error)
   }
 }
 </script>

@@ -1101,7 +1101,7 @@ async function viewAnnouncementDetail(announcement: Announcement) {
     try {
       await announcementApi.markAsRead(announcement.id)
       announcement.is_read = true
-    } catch {}
+    } catch { /* 静默忽略标记已读错误 */ }
   }
   selectedAnnouncement.value = announcement
   detailDialogOpen.value = true
