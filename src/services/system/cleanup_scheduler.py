@@ -154,9 +154,16 @@ class CleanupScheduler:
             logger.info("开始执行统计数据聚合...")
 
             from src.models.database import StatsDaily, User as DBUser
+            from src.services.system.scheduler import APP_TIMEZONE
+            from zoneinfo import ZoneInfo
 
-            now = datetime.now(timezone.utc)
-            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            # 使用业务时区计算日期，确保与定时任务触发时间一致
+            # 定时任务在 Asia/Shanghai 凌晨 1 点触发，此时应聚合 Asia/Shanghai 的"昨天"
+            app_tz = ZoneInfo(APP_TIMEZONE)
+            now_local = datetime.now(app_tz)
+            today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            # 转换为 UTC 用于数据库查询（stats_daily.date 存储的是 UTC）
+            today = today_local.astimezone(timezone.utc).replace(tzinfo=timezone.utc)
 
             if backfill:
                 # 启动时检查并回填缺失的日期
