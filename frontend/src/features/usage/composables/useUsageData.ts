@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import { usageApi } from '@/api/usage'
 import { meApi } from '@/api/me'
 import type {
@@ -11,6 +11,7 @@ import type {
   EnhancedModelStatsItem
 } from '../types'
 import { createDefaultStats } from '../types'
+import { log } from '@/utils/logger'
 
 export interface UseUsageDataOptions {
   isAdminPage: Ref<boolean>
@@ -221,7 +222,7 @@ export function useUsageData(options: UseUsageDataOptions) {
       }
     } catch (error: any) {
       if (error.response?.status !== 403) {
-        console.error('加载统计数据失败:', error)
+        log.error('加载统计数据失败:', error)
       }
       stats.value = createDefaultStats()
       modelStats.value = []
@@ -273,7 +274,7 @@ export function useUsageData(options: UseUsageDataOptions) {
       totalRecords.value = response.total || 0
 
     } catch (error) {
-      console.error('加载记录失败:', error)
+      log.error('加载记录失败:', error)
       currentRecords.value = []
       totalRecords.value = 0
     } finally {

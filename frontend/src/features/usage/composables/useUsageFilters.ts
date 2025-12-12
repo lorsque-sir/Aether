@@ -1,4 +1,4 @@
-import { ref, computed, type Ref, watch } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import type { UsageRecord, FilterStatusValue } from '../types'
 
 export interface UseUsageFiltersOptions {
