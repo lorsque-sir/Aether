@@ -1,12 +1,24 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { execSync } from 'child_process'
+
+function getGitVersion(): string {
+  try {
+    return execSync('git describe --tags --always').toString().trim()
+  } catch {
+    return '0.0.0.dev0'
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // GitHub Pages 部署时使用仓库名作为 base
   base: process.env.GITHUB_PAGES === 'true' ? '/Aether/' : '/',
   plugins: [vue()],
+  define: {
+    __APP_VERSION__: JSON.stringify(getGitVersion()),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

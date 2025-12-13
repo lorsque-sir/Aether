@@ -12,7 +12,8 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "lint": "eslint . --fix",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "version": "git describe --tags --always"
   },
   "dependencies": {
     "@types/dompurify": "^3.0.5",

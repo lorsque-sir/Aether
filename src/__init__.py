@@ -7,5 +7,10 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-__version__ = "9.1.0"
+
+try:
+    from src._version import __version__
+except ImportError:
+    __version__ = "0.0.0.dev0"
+
 __author__ = "AI Proxy"
