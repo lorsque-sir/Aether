@@ -6,17 +6,17 @@
       class="overflow-hidden"
     >
       <!-- 标题和操作栏 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div class="shrink-0">
+            <h3 class="text-sm sm:text-base font-semibold">
               公告管理
             </h3>
             <p class="text-xs text-muted-foreground mt-0.5">
               {{ isAdmin ? '管理系统公告和通知' : '查看系统公告和通知' }}
             </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <Badge
               v-if="unreadCount > 0"
               variant="default"
@@ -24,7 +24,7 @@
             >
               {{ unreadCount }} 条未读
             </Badge>
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
             <Button
               v-if="isAdmin"
               variant="ghost"
@@ -68,7 +68,7 @@
         v-else
         class="overflow-x-auto"
       >
-        <Table>
+        <Table class="hidden xl:table">
           <TableHeader>
             <TableRow class="border-b border-border/60 hover:bg-transparent">
               <TableHead class="w-[80px] h-12 font-semibold text-center">
@@ -217,6 +217,91 @@
             </TableRow>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div
+          v-if="announcements.length > 0"
+          class="xl:hidden divide-y divide-border/40"
+        >
+          <div
+            v-for="announcement in announcements"
+            :key="announcement.id"
+            :class="[
+              'p-4 space-y-2 cursor-pointer transition-colors',
+              announcement.is_read ? 'hover:bg-muted/30' : 'bg-primary/5 hover:bg-primary/10'
+            ]"
+            @click="viewAnnouncementDetail(announcement)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <component
+                  :is="getAnnouncementIcon(announcement.type)"
+                  class="w-4 h-4 shrink-0"
+                  :class="getIconColor(announcement.type)"
+                />
+                <span class="font-medium text-sm">{{ announcement.title }}</span>
+                <Pin
+                  v-if="announcement.is_pinned"
+                  class="w-3.5 h-3.5 text-muted-foreground shrink-0"
+                />
+              </div>
+              <Badge
+                :variant="announcement.is_read ? 'secondary' : 'default'"
+                class="text-xs shrink-0"
+              >
+                {{ announcement.is_read ? '已读' : '未读' }}
+              </Badge>
+            </div>
+            <p class="text-xs text-muted-foreground line-clamp-2">
+              {{ getPlainText(announcement.content) }}
+            </p>
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{{ announcement.author.username }}</span>
+              <span>·</span>
+              <span>{{ formatDate(announcement.created_at) }}</span>
+            </div>
+            <div
+              v-if="isAdmin"
+              class="flex items-center gap-4 pt-2"
+              @click.stop
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">置顶</span>
+                <Switch
+                  :model-value="announcement.is_pinned"
+                  class="data-[state=checked]:bg-emerald-500 scale-75"
+                  @update:model-value="toggleAnnouncementPin(announcement, $event)"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">启用</span>
+                <Switch
+                  :model-value="announcement.is_active"
+                  class="data-[state=checked]:bg-primary scale-75"
+                  @update:model-value="toggleAnnouncementActive(announcement, $event)"
+                />
+              </div>
+              <div class="flex items-center gap-1 ml-auto">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="openEditDialog(announcement)"
+                >
+                  <SquarePen class="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7 hover:text-destructive"
+                  @click="confirmDelete(announcement)"
+                >
+                  <Trash2 class="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 分页 -->

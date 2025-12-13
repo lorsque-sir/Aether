@@ -13,12 +13,12 @@
         />
 
         <!-- 抽屉内容 -->
-        <Card class="relative h-full w-[700px] rounded-none shadow-2xl overflow-y-auto">
+        <Card class="relative h-full w-full sm:w-[700px] sm:max-w-[90vw] rounded-none shadow-2xl overflow-y-auto">
           <!-- 标题栏 -->
-          <div class="sticky top-0 z-10 bg-background border-b p-6">
-            <div class="flex items-start justify-between gap-4">
+          <div class="sticky top-0 z-10 bg-background border-b p-4 sm:p-6">
+            <div class="flex items-start justify-between gap-3 sm:gap-4">
               <div class="space-y-1 flex-1 min-w-0">
-                <h3 class="text-xl font-bold truncate">
+                <h3 class="text-lg sm:text-xl font-bold truncate">
                   {{ model.display_name || model.name }}
                 </h3>
                 <div class="flex items-center gap-2">
@@ -55,13 +55,13 @@
             </div>
           </div>
 
-          <div class="p-6 space-y-6">
+          <div class="p-4 sm:p-6 space-y-6">
             <!-- 模型能力 -->
             <div class="space-y-3">
               <h4 class="font-semibold text-sm">
                 模型能力
               </h4>
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="flex items-center gap-2 p-3 rounded-lg border">
                   <Zap class="w-5 h-5 text-muted-foreground" />
                   <div class="flex-1">

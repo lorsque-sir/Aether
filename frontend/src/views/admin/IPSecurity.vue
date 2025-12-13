@@ -44,17 +44,17 @@
       variant="default"
       class="overflow-hidden"
     >
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div class="shrink-0">
+            <h3 class="text-sm sm:text-base font-semibold">
               IP 黑名单
             </h3>
             <p class="text-xs text-muted-foreground mt-0.5">
               管理被禁止访问的 IP 地址
             </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
@@ -114,17 +114,17 @@
       variant="default"
       class="overflow-hidden"
     >
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div class="shrink-0">
+            <h3 class="text-sm sm:text-base font-semibold">
               IP 白名单
             </h3>
             <p class="text-xs text-muted-foreground mt-0.5">
               管理可信任的 IP 地址（支持 CIDR 格式）
             </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
@@ -158,7 +158,7 @@
       </div>
 
       <div v-else>
-        <Table>
+        <Table class="hidden sm:table">
           <TableHeader>
             <TableRow>
               <TableHead>IP 地址 / CIDR</TableHead>
@@ -189,6 +189,25 @@
             </TableRow>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div class="sm:hidden divide-y divide-border/40">
+          <div
+            v-for="ip in whitelistData.whitelist"
+            :key="ip"
+            class="p-4 flex items-center justify-between gap-3"
+          >
+            <span class="font-mono text-sm truncate">{{ ip }}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-8 px-3 shrink-0"
+              @click="handleRemoveFromWhitelist(ip)"
+            >
+              <Trash2 class="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </Card>
 

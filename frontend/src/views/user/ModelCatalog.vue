@@ -3,15 +3,15 @@
     <!-- 模型列表 -->
     <Card class="overflow-hidden">
       <!-- 标题和操作栏 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <!-- 左侧：标题 -->
-          <h3 class="text-base font-semibold">
+          <h3 class="text-sm sm:text-base font-semibold shrink-0">
             可用模型
           </h3>
 
           <!-- 右侧：操作区 -->
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- 搜索框 -->
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -20,11 +20,11 @@
                 v-model="searchQuery"
                 type="text"
                 placeholder="搜索模型名称..."
-                class="w-44 pl-8 pr-3 h-8 text-sm bg-background/50 border-border/60 focus:border-primary/40 transition-colors"
+                class="w-32 sm:w-44 pl-8 pr-3 h-8 text-sm bg-background/50 border-border/60 focus:border-primary/40 transition-colors"
               />
             </div>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 能力筛选 -->
             <div class="flex items-center border rounded-md border-border/60 h-8 overflow-hidden">
@@ -56,7 +56,7 @@
               </button>
             </div>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 刷新按钮 -->
             <RefreshButton
@@ -68,7 +68,7 @@
       </div>
 
       <div class="overflow-x-auto">
-        <Table class="table-fixed w-full">
+        <Table class="hidden xl:table table-fixed w-full">
           <TableHeader>
             <TableRow class="border-b border-border/60 hover:bg-transparent">
               <TableHead class="w-[140px] h-12 font-semibold">
@@ -219,6 +219,91 @@
             </template>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div
+          v-if="!loading && filteredModels.length > 0"
+          class="xl:hidden divide-y divide-border/40"
+        >
+          <div
+            v-for="model in paginatedModels"
+            :key="model.id"
+            class="p-4 space-y-3 hover:bg-muted/30 cursor-pointer transition-colors"
+            @click="selectedModel = model; drawerOpen = true"
+          >
+            <!-- 第一行：名称 + 状态 -->
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <span class="font-medium truncate block">{{ model.display_name || model.name }}</span>
+                <div class="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <span class="truncate">{{ model.name }}</span>
+                  <button
+                    class="p-0.5 rounded hover:bg-muted transition-colors shrink-0"
+                    @click.stop="copyToClipboard(model.name)"
+                  >
+                    <Copy class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <Badge :variant="model.is_active ? 'success' : 'secondary'">
+                {{ model.is_active ? '可用' : '停用' }}
+              </Badge>
+            </div>
+
+            <!-- 第二行：能力图标 -->
+            <div class="flex gap-1.5">
+              <Eye
+                v-if="model.default_supports_vision"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Wrench
+                v-if="model.default_supports_function_calling"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Brain
+                v-if="model.default_supports_extended_thinking"
+                class="w-4 h-4 text-muted-foreground"
+              />
+            </div>
+
+            <!-- 第三行：价格 -->
+            <div
+              v-if="getFirstTierPrice(model, 'input') || getFirstTierPrice(model, 'output')"
+              class="text-xs text-muted-foreground font-mono"
+            >
+              In: ${{ getFirstTierPrice(model, 'input')?.toFixed(2) || '-' }} / Out: ${{ getFirstTierPrice(model, 'output')?.toFixed(2) || '-' }}
+            </div>
+
+            <!-- 第四行：模型偏好按钮 -->
+            <div
+              v-if="getModelSupportedCapabilities(model).length > 0"
+              class="flex gap-1.5 flex-wrap"
+              @click.stop
+            >
+              <button
+                v-for="cap in getModelSupportedCapabilitiesDetails(model)"
+                :key="cap.name"
+                class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-all"
+                :class="[
+                  isCapabilityEnabled(model.name, cap.name)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-transparent text-muted-foreground border border-dashed border-muted-foreground/50'
+                ]"
+                @click="toggleCapability(model.name, cap.name)"
+              >
+                <Check
+                  v-if="isCapabilityEnabled(model.name, cap.name)"
+                  class="w-3 h-3"
+                />
+                <Plus
+                  v-else
+                  class="w-3 h-3"
+                />
+                {{ cap.short_name || cap.display_name }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 分页 -->

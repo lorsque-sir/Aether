@@ -14,10 +14,10 @@
       </div>
 
       <div v-else>
-        <div class="px-6 py-3.5 border-b border-border/60">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <h3 class="text-base font-semibold">
+        <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div class="shrink-0">
+              <h3 class="text-sm sm:text-base font-semibold">
                 独立余额 API Keys
               </h3>
               <p class="text-xs text-muted-foreground mt-0.5">
@@ -28,7 +28,7 @@
                 > · 即将到期 {{ expiringSoonCount }}</span>
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <!-- 搜索框 -->
               <div class="relative">
                 <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
@@ -36,19 +36,19 @@
                   v-model="searchQuery"
                   type="text"
                   placeholder="搜索..."
-                  class="h-8 w-40 pl-8 pr-2 text-xs"
+                  class="h-8 w-28 sm:w-40 pl-8 pr-2 text-xs"
                 />
               </div>
 
               <!-- 分隔线 -->
-              <div class="h-4 w-px bg-border" />
+              <div class="hidden sm:block h-4 w-px bg-border" />
 
               <!-- 状态筛选 -->
               <Select
                 v-model="filterStatus"
                 v-model:open="filterStatusOpen"
               >
-                <SelectTrigger class="w-28 h-8 text-xs border-border/60">
+                <SelectTrigger class="w-20 sm:w-28 h-8 text-xs border-border/60">
                   <SelectValue placeholder="全部状态" />
                 </SelectTrigger>
                 <SelectContent>
@@ -67,7 +67,7 @@
                 v-model="filterBalance"
                 v-model:open="filterBalanceOpen"
               >
-                <SelectTrigger class="w-28 h-8 text-xs border-border/60">
+                <SelectTrigger class="w-20 sm:w-28 h-8 text-xs border-border/60">
                   <SelectValue placeholder="全部类型" />
                 </SelectTrigger>
                 <SelectContent>
@@ -82,7 +82,7 @@
               </Select>
 
               <!-- 分隔线 -->
-              <div class="h-4 w-px bg-border" />
+              <div class="hidden sm:block h-4 w-px bg-border" />
 
               <!-- 创建独立 Key 按钮 -->
               <Button

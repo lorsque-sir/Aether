@@ -5,15 +5,15 @@
       <!-- 模型列表 -->
       <Card class="overflow-hidden">
         <!-- 标题和操作栏 -->
-        <div class="px-6 py-3.5 border-b border-border/60">
-          <div class="flex items-center justify-between gap-4">
+        <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <!-- 左侧：标题 -->
-            <h3 class="text-base font-semibold">
+            <h3 class="text-sm sm:text-base font-semibold shrink-0">
               模型管理
             </h3>
 
             <!-- 右侧：操作区 -->
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <!-- 搜索框 -->
               <div class="relative">
                 <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70 z-10 pointer-events-none" />
@@ -22,11 +22,11 @@
                   v-model="searchQuery"
                   type="text"
                   placeholder="搜索模型名称..."
-                  class="w-44 pl-8 pr-3 h-8 text-sm bg-muted/30 border-border/50 focus:border-primary/50 transition-colors"
+                  class="w-32 sm:w-44 pl-8 pr-3 h-8 text-sm bg-muted/30 border-border/50 focus:border-primary/50 transition-colors"
                 />
               </div>
 
-              <div class="h-4 w-px bg-border" />
+              <div class="hidden sm:block h-4 w-px bg-border" />
 
               <!-- 能力筛选 -->
               <div class="flex items-center border rounded-md border-border/60 h-8 overflow-hidden">
@@ -76,7 +76,7 @@
                 </button>
               </div>
 
-              <div class="h-4 w-px bg-border" />
+              <div class="hidden sm:block h-4 w-px bg-border" />
 
               <!-- 操作按钮 -->
               <Button
@@ -96,7 +96,7 @@
           </div>
         </div>
 
-        <Table>
+        <Table class="hidden xl:table">
           <TableHeader>
             <TableRow>
               <TableHead class="w-[240px]">
@@ -301,6 +301,109 @@
             </template>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div
+          v-if="!loading && filteredGlobalModels.length > 0"
+          class="xl:hidden divide-y divide-border/40"
+        >
+          <div
+            v-for="model in paginatedGlobalModels"
+            :key="model.id"
+            class="p-4 space-y-3 hover:bg-muted/50 cursor-pointer transition-colors"
+            @click="selectModel(model)"
+          >
+            <!-- 第一行：名称 + 状态 + 操作 -->
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium truncate">{{ model.display_name }}</span>
+                  <Badge
+                    :variant="model.is_active ? 'default' : 'secondary'"
+                    class="text-xs shrink-0"
+                  >
+                    {{ model.is_active ? '活跃' : '停用' }}
+                  </Badge>
+                </div>
+                <div class="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <span class="font-mono truncate">{{ model.name }}</span>
+                  <button
+                    class="p-0.5 rounded hover:bg-muted transition-colors shrink-0"
+                    @click.stop="copyToClipboard(model.name)"
+                  >
+                    <Copy class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <div
+                class="flex items-center gap-0.5 shrink-0"
+                @click.stop
+              >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="editModel(model)"
+                >
+                  <Edit class="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="toggleModelStatus(model)"
+                >
+                  <Power class="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="deleteModel(model)"
+                >
+                  <Trash2 class="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <!-- 第二行：能力图标 -->
+            <div class="flex flex-wrap gap-1.5">
+              <Zap
+                v-if="model.default_supports_streaming"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Image
+                v-if="model.default_supports_image_generation"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Eye
+                v-if="model.default_supports_vision"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Wrench
+                v-if="model.default_supports_function_calling"
+                class="w-4 h-4 text-muted-foreground"
+              />
+              <Brain
+                v-if="model.default_supports_extended_thinking"
+                class="w-4 h-4 text-muted-foreground"
+              />
+            </div>
+
+            <!-- 第三行：统计信息 -->
+            <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span>提供商 {{ model.provider_count || 0 }}</span>
+              <span>别名 {{ model.alias_count || 0 }}</span>
+              <span>调用 {{ formatUsageCount(model.usage_count || 0) }}</span>
+              <span
+                v-if="getFirstTierPrice(model, 'input') || getFirstTierPrice(model, 'output')"
+                class="font-mono"
+              >
+                ${{ getFirstTierPrice(model, 'input')?.toFixed(2) || '-' }}/${{ getFirstTierPrice(model, 'output')?.toFixed(2) || '-' }}
+              </span>
+            </div>
+          </div>
+        </div>
 
         <!-- 分页 -->
         <Pagination

@@ -1,7 +1,7 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 px-4 sm:px-6 lg:px-0">
     <!-- 页面头部：统计卡片 + 公告 -->
-    <div class="flex gap-6 items-start">
+    <div class="flex flex-col sm:flex-row gap-6 sm:items-start">
       <!-- 左侧统计区域 -->
       <div
         ref="statsPanelRef"
@@ -15,7 +15,7 @@
         </Badge>
 
         <!-- 主要统计卡片 -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <template v-if="loading && stats.length === 0">
             <Card
               v-for="i in 4"
@@ -31,53 +31,55 @@
             v-for="(stat, index) in stats"
             v-else
             :key="stat.name"
-            class="relative overflow-hidden p-5"
+            class="relative overflow-hidden p-3 sm:p-5"
             :class="statCardBorders[index % statCardBorders.length]"
           >
             <div
               class="pointer-events-none absolute -right-4 -top-6 h-28 w-28 rounded-full blur-3xl opacity-40"
               :class="statCardGlows[index % statCardGlows.length]"
             />
-            <div class="flex items-start justify-between relative">
-              <div>
-                <p class="text-[11px] font-semibold uppercase tracking-[0.4em] text-muted-foreground">
-                  {{ stat.name }}
-                </p>
-                <p class="mt-4 text-3xl font-semibold text-foreground">
-                  {{ stat.value }}
-                </p>
-                <p
-                  v-if="stat.subValue"
-                  class="mt-1 text-sm text-muted-foreground"
-                >
-                  {{ stat.subValue }}
-                </p>
-                <div
-                  v-if="stat.change || stat.extraBadge"
-                  class="mt-2 flex items-center gap-1.5"
-                >
-                  <Badge
-                    v-if="stat.change"
-                    variant="secondary"
-                  >
-                    {{ stat.change }}
-                  </Badge>
-                  <Badge
-                    v-if="stat.extraBadge"
-                    variant="secondary"
-                  >
-                    {{ stat.extraBadge }}
-                  </Badge>
-                </div>
-              </div>
-              <div
-                class="rounded-2xl border border-border bg-card/50 p-3 shadow-inner backdrop-blur-sm"
-                :class="getStatIconColor(index)"
+            <!-- 图标固定在右上角 -->
+            <div
+              class="absolute top-3 right-3 sm:top-5 sm:right-5 rounded-xl sm:rounded-2xl border border-border bg-card/50 p-2 sm:p-3 shadow-inner backdrop-blur-sm"
+              :class="getStatIconColor(index)"
+            >
+              <component
+                :is="stat.icon"
+                class="h-4 w-4 sm:h-5 sm:w-5"
+              />
+            </div>
+            <!-- 内容区域 -->
+            <div>
+              <p class="text-[9px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.4em] text-muted-foreground pr-10 sm:pr-14">
+                {{ stat.name }}
+              </p>
+              <p class="mt-2 sm:mt-4 text-xl sm:text-3xl font-semibold text-foreground">
+                {{ stat.value }}
+              </p>
+              <p
+                v-if="stat.subValue"
+                class="mt-0.5 sm:mt-1 text-[10px] sm:text-sm text-muted-foreground"
               >
-                <component
-                  :is="stat.icon"
-                  class="h-5 w-5"
-                />
+                {{ stat.subValue }}
+              </p>
+              <div
+                v-if="stat.change || stat.extraBadge"
+                class="mt-1.5 sm:mt-2 flex items-center gap-1 sm:gap-1.5 flex-wrap"
+              >
+                <Badge
+                  v-if="stat.change"
+                  variant="secondary"
+                  class="text-[9px] sm:text-xs"
+                >
+                  {{ stat.change }}
+                </Badge>
+                <Badge
+                  v-if="stat.extraBadge"
+                  variant="secondary"
+                  class="text-[9px] sm:text-xs"
+                >
+                  {{ stat.extraBadge }}
+                </Badge>
               </div>
             </div>
           </Card>
@@ -99,70 +101,62 @@
               Monthly
             </Badge>
           </div>
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Card class="p-4 border-book-cloth/30">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    平均响应
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ systemHealth.avg_response_time }}s
-                  </p>
-                </div>
-                <Clock class="h-4 w-4 text-book-cloth" />
+          <div class="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+            <Card class="relative p-3 sm:p-4 border-book-cloth/30">
+              <Clock class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-book-cloth" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  平均响应
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ systemHealth.avg_response_time }}s
+                </p>
               </div>
             </Card>
-            <Card class="p-4 border-kraft/30">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    错误率
-                  </p>
-                  <p
-                    class="mt-2 text-xl font-semibold"
-                    :class="systemHealth.error_rate > 5 ? 'text-destructive' : 'text-foreground'"
-                  >
-                    {{ systemHealth.error_rate }}%
-                  </p>
-                </div>
-                <AlertTriangle class="h-4 w-4 text-kraft" />
+            <Card class="relative p-3 sm:p-4 border-kraft/30">
+              <AlertTriangle class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-kraft" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  错误率
+                </p>
+                <p
+                  class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold"
+                  :class="systemHealth.error_rate > 5 ? 'text-destructive' : 'text-foreground'"
+                >
+                  {{ systemHealth.error_rate }}%
+                </p>
               </div>
             </Card>
-            <Card class="p-4 border-book-cloth/25">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    转移次数
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ systemHealth.fallback_count }}
-                  </p>
-                </div>
-                <Shuffle class="h-4 w-4 text-kraft" />
+            <Card class="relative p-3 sm:p-4 border-book-cloth/25">
+              <Shuffle class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-kraft" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  转移次数
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ systemHealth.fallback_count }}
+                </p>
               </div>
             </Card>
             <Card
               v-if="costStats"
-              class="p-4 border-manilla/40"
+              class="relative p-3 sm:p-4 border-manilla/40"
             >
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    实际成本
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ formatCurrency(costStats.total_actual_cost) }}
-                  </p>
-                  <Badge
-                    v-if="costStats.cost_savings > 0"
-                    variant="success"
-                    class="mt-1 text-[10px]"
-                  >
-                    节省 {{ formatCurrency(costStats.cost_savings) }}
-                  </Badge>
-                </div>
-                <DollarSign class="h-4 w-4 text-book-cloth" />
+              <DollarSign class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-book-cloth" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  实际成本
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ formatCurrency(costStats.total_actual_cost) }}
+                </p>
+                <Badge
+                  v-if="costStats.cost_savings > 0"
+                  variant="success"
+                  class="mt-1 text-[9px] sm:text-[10px]"
+                >
+                  节省 {{ formatCurrency(costStats.cost_savings) }}
+                </Badge>
               </div>
             </Card>
           </div>
@@ -184,63 +178,55 @@
               Monthly
             </Badge>
           </div>
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Card class="p-4 border-book-cloth/30">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    缓存命中率
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ cacheStats.cache_hit_rate || 0 }}%
-                  </p>
-                </div>
-                <Database class="h-4 w-4 text-book-cloth" />
+          <div class="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+            <Card class="relative p-3 sm:p-4 border-book-cloth/30">
+              <Database class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-book-cloth" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  缓存命中率
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ cacheStats.cache_hit_rate || 0 }}%
+                </p>
               </div>
             </Card>
-            <Card class="p-4 border-kraft/30">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    缓存读取
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ formatTokens(cacheStats.cache_read_tokens) }}
-                  </p>
-                </div>
-                <Hash class="h-4 w-4 text-kraft" />
+            <Card class="relative p-3 sm:p-4 border-kraft/30">
+              <Hash class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-kraft" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  缓存读取
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ formatTokens(cacheStats.cache_read_tokens) }}
+                </p>
               </div>
             </Card>
-            <Card class="p-4 border-book-cloth/25">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    缓存创建
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ formatTokens(cacheStats.cache_creation_tokens) }}
-                  </p>
-                </div>
-                <Database class="h-4 w-4 text-kraft" />
+            <Card class="relative p-3 sm:p-4 border-book-cloth/25">
+              <Database class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-kraft" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  缓存创建
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ formatTokens(cacheStats.cache_creation_tokens) }}
+                </p>
               </div>
             </Card>
             <Card
               v-if="tokenBreakdown"
-              class="p-4 border-manilla/40"
+              class="relative p-3 sm:p-4 border-manilla/40"
             >
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                    总Token
-                  </p>
-                  <p class="mt-2 text-xl font-semibold text-foreground">
-                    {{ formatTokens((tokenBreakdown.input || 0) + (tokenBreakdown.output || 0)) }}
-                  </p>
-                  <p class="mt-1 text-[10px] text-muted-foreground">
-                    输入 {{ formatTokens(tokenBreakdown.input || 0) }} / 输出 {{ formatTokens(tokenBreakdown.output || 0) }}
-                  </p>
-                </div>
-                <Hash class="h-4 w-4 text-book-cloth" />
+              <Hash class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-book-cloth" />
+              <div class="pr-6">
+                <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
+                  总Token
+                </p>
+                <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
+                  {{ formatTokens((tokenBreakdown.input || 0) + (tokenBreakdown.output || 0)) }}
+                </p>
+                <p class="mt-0.5 sm:mt-1 text-[9px] sm:text-[10px] text-muted-foreground">
+                  输入 {{ formatTokens(tokenBreakdown.input || 0) }} / 输出 {{ formatTokens(tokenBreakdown.output || 0) }}
+                </p>
               </div>
             </Card>
           </div>
@@ -250,7 +236,7 @@
       <!-- 右侧系统公告 -->
       <div
         id="announcements-section"
-        class="w-[340px] flex-shrink-0 flex flex-col min-h-0"
+        class="w-full sm:w-[260px] md:w-[300px] lg:w-[320px] flex-shrink-0 flex flex-col min-h-0"
         :style="announcementsContainerStyle"
       >
         <div class="mb-3 flex items-center justify-between flex-shrink-0">
@@ -265,7 +251,7 @@
           </Badge>
         </div>
 
-        <Card class="overflow-hidden p-4 flex flex-col flex-1 min-h-0 h-full">
+        <Card class="overflow-hidden p-4 flex flex-col flex-1 min-h-0 h-full max-h-[280px] sm:max-h-none">
           <div
             v-if="loadingAnnouncements"
             class="py-8 text-center"
@@ -420,9 +406,70 @@
       </Card>
     </div>
 
-    <!-- 每日统计表格 -->
+    <!-- 每日统计 -->
     <Card class="overflow-hidden mt-6">
-      <Table>
+      <!-- 移动端：卡片列表 -->
+      <div class="sm:hidden">
+        <div class="px-4 py-3 border-b border-border/60">
+          <h3 class="text-sm font-semibold">
+            每日统计
+          </h3>
+        </div>
+        <div
+          v-if="loadingDaily"
+          class="flex items-center justify-center py-8"
+        >
+          <Skeleton class="h-5 w-5 rounded-full" />
+          <span class="ml-2 text-muted-foreground text-xs">加载中...</span>
+        </div>
+        <div
+          v-else-if="dailyStats.length === 0"
+          class="py-8 text-center text-muted-foreground text-xs"
+        >
+          暂无数据
+        </div>
+        <div
+          v-else
+          class="divide-y divide-border/60"
+        >
+          <div
+            v-for="stat in dailyStats.slice().reverse()"
+            :key="stat.date"
+            class="p-4 space-y-2"
+          >
+            <div class="flex items-center justify-between">
+              <span class="font-medium text-sm">{{ formatDate(stat.date) }}</span>
+              <Badge
+                variant="success"
+                class="text-[10px]"
+              >
+                ${{ stat.cost.toFixed(4) }}
+              </Badge>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="flex justify-between">
+                <span class="text-muted-foreground">请求</span>
+                <span>{{ stat.requests.toLocaleString() }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted-foreground">Tokens</span>
+                <span>{{ formatTokens(stat.tokens) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted-foreground">响应</span>
+                <span>{{ formatResponseTime(stat.avg_response_time) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-muted-foreground">模型</span>
+                <span>{{ stat.unique_models }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 桌面端：表格 -->
+      <Table class="hidden sm:table">
         <TableHeader>
           <TableRow>
             <TableHead class="text-left">
@@ -657,12 +704,20 @@ const statsPanelRef = ref<HTMLElement | null>(null)
 const announcementsHeight = ref<number | null>(null)
 const announcementsTimelineRef = ref<HTMLElement | null>(null)
 const timelineLineStyle = ref<{ top: string; bottom: string }>({ top: '0px', bottom: '0px' })
+const isLargeScreen = ref(false)
 
 const announcementsContainerStyle = computed(() => {
-  if (!announcementsHeight.value) return {}
-  // 设置固定高度，与左侧统计面板保持一致
+  // 移动端不设置固定高度，让内容自然流动
+  if (!isLargeScreen.value || !announcementsHeight.value) return {}
+  // 桌面端设置固定高度，与左侧统计面板保持一致
   return { height: `${announcementsHeight.value}px` }
 })
+
+function checkScreenSize() {
+  if (typeof window !== 'undefined') {
+    isLargeScreen.value = window.innerWidth >= 640 // sm breakpoint
+  }
+}
 
 let statsPanelObserver: ResizeObserver | null = null
 let announcementsTimelineObserver: ResizeObserver | null = null
@@ -698,6 +753,7 @@ function updateTimelineLine() {
 }
 
 function handleWindowResize() {
+  checkScreenSize()
   updateAnnouncementsHeight()
   updateTimelineLine()
 }
@@ -984,6 +1040,7 @@ const chartOptions = computed(() => ({
 }))
 
 onMounted(async () => {
+  checkScreenSize()
   setupResizeObserver()
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleWindowResize)

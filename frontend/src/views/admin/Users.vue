@@ -6,8 +6,86 @@
       class="overflow-hidden"
     >
       <!-- 标题和筛选器 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
+      <div class="px-4 sm:px-6 py-3.5 border-b border-border/60">
+        <!-- 移动端：标题行 + 筛选器行 -->
+        <div class="flex flex-col gap-3 sm:hidden">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-semibold">
+              用户管理
+            </h3>
+            <div class="flex items-center gap-2">
+              <!-- 新增用户按钮 -->
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8"
+                title="新增用户"
+                @click="openCreateDialog"
+              >
+                <Plus class="w-3.5 h-3.5" />
+              </Button>
+              <!-- 刷新按钮 -->
+              <RefreshButton
+                :loading="usersStore.loading || loadingStats"
+                @click="refreshUsers"
+              />
+            </div>
+          </div>
+          <!-- 筛选器 -->
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1">
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+              <Input
+                id="users-search-mobile"
+                v-model="searchQuery"
+                type="text"
+                placeholder="搜索..."
+                class="w-full pl-8 pr-3 h-8 text-sm bg-background/50 border-border/60"
+              />
+            </div>
+            <Select
+              v-model="filterRole"
+              v-model:open="filterRoleOpenMobile"
+            >
+              <SelectTrigger class="w-24 h-8 text-xs border-border/60">
+                <SelectValue placeholder="角色" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  全部
+                </SelectItem>
+                <SelectItem value="admin">
+                  管理员
+                </SelectItem>
+                <SelectItem value="user">
+                  用户
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              v-model="filterStatus"
+              v-model:open="filterStatusOpenMobile"
+            >
+              <SelectTrigger class="w-20 h-8 text-xs border-border/60">
+                <SelectValue placeholder="状态" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  全部
+                </SelectItem>
+                <SelectItem value="active">
+                  活跃
+                </SelectItem>
+                <SelectItem value="inactive">
+                  禁用
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <!-- 桌面端：单行布局 -->
+        <div class="hidden sm:flex items-center justify-between gap-4">
           <h3 class="text-base font-semibold">
             用户管理
           </h3>
@@ -172,10 +250,6 @@
                     <span class="w-14">Tokens:</span>
                     <span class="font-medium text-foreground">{{ formatTokens(userStats[user.id]?.total_tokens ?? 0) }}</span>
                   </div>
-                  <div class="flex items-center text-muted-foreground">
-                    <span class="w-14">费用:</span>
-                    <span class="font-medium text-foreground">${{ formatCurrency(userStats[user.id]?.total_cost) }}</span>
-                  </div>
                 </div>
                 <div
                   v-else
@@ -336,14 +410,6 @@
                 </div>
                 <div class="font-semibold text-sm text-foreground">
                   {{ formatTokens(userStats[user.id]?.total_tokens ?? 0) }}
-                </div>
-              </div>
-              <div class="col-span-2">
-                <div class="text-muted-foreground mb-1">
-                  消费金额
-                </div>
-                <div class="font-semibold text-sm text-foreground">
-                  ${{ formatCurrency(userStats[user.id]?.total_cost) }}
                 </div>
               </div>
             </div>
@@ -707,6 +773,8 @@ const filterRole = ref('all')
 const filterStatus = ref('all')
 const filterRoleOpen = ref(false)
 const filterStatusOpen = ref(false)
+const filterRoleOpenMobile = ref(false)
+const filterStatusOpenMobile = ref(false)
 
 const currentPage = ref(1)
 const pageSize = ref(20)

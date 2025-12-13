@@ -6,17 +6,17 @@
       class="overflow-hidden"
     >
       <!-- 标题和操作栏 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div class="shrink-0">
+            <h3 class="text-sm sm:text-base font-semibold">
               审计日志
             </h3>
             <p class="text-xs text-muted-foreground mt-0.5">
               查看系统所有操作记录
             </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- 搜索框 -->
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
@@ -24,19 +24,19 @@
                 id="audit-logs-search"
                 v-model="searchQuery"
                 placeholder="搜索用户ID..."
-                class="w-64 h-8 text-sm pl-8"
+                class="w-32 sm:w-64 h-8 text-sm pl-8"
                 @input="handleSearchChange"
               />
             </div>
             <!-- 分隔线 -->
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
             <!-- 事件类型筛选 -->
             <Select
               v-model="filters.eventType"
               v-model:open="eventTypeSelectOpen"
               @update:model-value="handleEventTypeChange"
             >
-              <SelectTrigger class="w-40 h-8 border-border/60">
+              <SelectTrigger class="w-24 sm:w-40 h-8 border-border/60">
                 <SelectValue placeholder="全部类型" />
               </SelectTrigger>
               <SelectContent>
@@ -81,7 +81,7 @@
               v-model:open="daysSelectOpen"
               @update:model-value="handleDaysChange"
             >
-              <SelectTrigger class="w-28 h-8 border-border/60">
+              <SelectTrigger class="w-20 sm:w-28 h-8 border-border/60">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -110,7 +110,7 @@
             >
               <FilterX class="w-3.5 h-3.5" />
             </Button>
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
             <!-- 导出按钮 -->
             <Button
               variant="ghost"
@@ -145,7 +145,7 @@
       </div>
 
       <div v-else>
-        <Table>
+        <Table class="hidden xl:table">
           <TableHeader>
             <TableRow class="border-b border-border/60 hover:bg-transparent">
               <TableHead class="h-12 font-semibold">
@@ -241,6 +241,60 @@
             </TableRow>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div
+          v-if="logs.length > 0"
+          class="xl:hidden divide-y divide-border/40"
+        >
+          <div
+            v-for="logItem in logs"
+            :key="logItem.id"
+            class="p-4 space-y-2 hover:bg-muted/30 cursor-pointer transition-colors"
+            @click="showLogDetail(logItem)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <Badge :variant="getEventTypeBadgeVariant(logItem.event_type)">
+                  <component
+                    :is="getEventTypeIcon(logItem.event_type)"
+                    class="h-3 w-3 mr-1"
+                  />
+                  {{ getEventTypeLabel(logItem.event_type) }}
+                </Badge>
+                <div class="text-xs text-muted-foreground mt-1.5">
+                  {{ formatDateTime(logItem.created_at) }}
+                </div>
+              </div>
+              <Badge
+                v-if="logItem.status_code"
+                :variant="getStatusCodeVariant(logItem.status_code)"
+                class="shrink-0"
+              >
+                {{ logItem.status_code }}
+              </Badge>
+            </div>
+            <div
+              v-if="logItem.user_id"
+              class="text-sm"
+            >
+              {{ logItem.user_email || `用户 ${logItem.user_id}` }}
+            </div>
+            <div
+              class="text-xs text-muted-foreground truncate"
+              :title="logItem.description"
+            >
+              {{ logItem.description || '无描述' }}
+            </div>
+            <div
+              v-if="logItem.ip_address"
+              class="flex items-center text-xs text-muted-foreground"
+            >
+              <Globe class="h-3 w-3 mr-1" />
+              {{ logItem.ip_address }}
+            </div>
+          </div>
+        </div>
 
         <!-- 分页控件 -->
         <Pagination

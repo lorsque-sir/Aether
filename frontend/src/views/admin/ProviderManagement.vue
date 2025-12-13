@@ -6,15 +6,15 @@
       class="overflow-hidden"
     >
       <!-- 标题和操作栏 -->
-      <div class="px-6 py-3.5 border-b border-border/50">
-        <div class="flex items-center justify-between gap-4">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/50">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <!-- 左侧：标题 -->
-          <h3 class="text-base font-semibold text-foreground">
+          <h3 class="text-sm sm:text-base font-semibold text-foreground shrink-0">
             提供商管理
           </h3>
 
           <!-- 右侧：操作区 -->
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- 搜索框 -->
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70 z-10 pointer-events-none" />
@@ -23,11 +23,11 @@
                 v-model="searchQuery"
                 type="text"
                 placeholder="搜索提供商..."
-                class="w-44 pl-8 pr-3 h-8 text-sm bg-muted/30 border-border/50 focus:border-primary/50 transition-colors"
+                class="w-32 sm:w-44 pl-8 pr-3 h-8 text-sm bg-muted/30 border-border/50 focus:border-primary/50 transition-colors"
               />
             </div>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 调度策略 -->
             <button
@@ -35,12 +35,12 @@
               title="点击调整调度策略"
               @click="openPriorityDialog"
             >
-              <span class="text-muted-foreground/80">调度:</span>
+              <span class="text-muted-foreground/80 hidden sm:inline">调度:</span>
               <span class="font-medium text-foreground/90">{{ priorityModeConfig.label }}</span>
               <ChevronDown class="w-3 h-3 text-muted-foreground/70 group-hover:text-foreground transition-colors" />
             </button>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 操作按钮 -->
             <Button
@@ -94,7 +94,7 @@
       <!-- 桌面端表格 -->
       <div
         v-else
-        class="overflow-x-auto"
+        class="hidden xl:block overflow-x-auto"
       >
         <Table>
           <TableHeader>
@@ -287,6 +287,118 @@
             </TableRow>
           </TableBody>
         </Table>
+      </div>
+
+      <!-- 移动端卡片列表 -->
+      <div
+        v-if="!loading && filteredProviders.length > 0"
+        class="xl:hidden divide-y divide-border/40"
+      >
+        <div
+          v-for="provider in paginatedProviders"
+          :key="provider.id"
+          class="p-4 space-y-3 hover:bg-muted/20 transition-colors cursor-pointer"
+          @click="openProviderDrawer(provider.id)"
+        >
+          <!-- 第一行：名称 + 状态 + 操作 -->
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-foreground truncate">{{ provider.display_name }}</span>
+                <Badge
+                  :variant="provider.is_active ? 'success' : 'secondary'"
+                  class="text-xs shrink-0"
+                >
+                  {{ provider.is_active ? '活跃' : '停用' }}
+                </Badge>
+              </div>
+              <span class="text-xs text-muted-foreground/70 font-mono">{{ provider.name }}</span>
+            </div>
+            <div
+              class="flex items-center gap-0.5 shrink-0"
+              @click.stop
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                @click="openEditProviderDialog(provider)"
+              >
+                <Edit class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                @click="toggleProviderStatus(provider)"
+              >
+                <Power class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                @click="handleDeleteProvider(provider)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <!-- 第二行：计费类型 + 资源统计 -->
+          <div class="flex flex-wrap items-center gap-3 text-xs">
+            <Badge
+              variant="outline"
+              class="text-xs font-normal border-border/50"
+            >
+              {{ formatBillingType(provider.billing_type || 'pay_as_you_go') }}
+            </Badge>
+            <span class="text-muted-foreground">
+              端点 {{ provider.active_endpoints }}/{{ provider.total_endpoints }}
+            </span>
+            <span class="text-muted-foreground">
+              密钥 {{ provider.active_keys }}/{{ provider.total_keys }}
+            </span>
+            <span class="text-muted-foreground">
+              模型 {{ provider.active_models }}/{{ provider.total_models }}
+            </span>
+          </div>
+
+          <!-- 第三行：端点健康 -->
+          <div
+            v-if="provider.endpoint_health_details && provider.endpoint_health_details.length > 0"
+            class="flex flex-wrap gap-1.5"
+          >
+            <span
+              v-for="endpoint in sortEndpoints(provider.endpoint_health_details)"
+              :key="endpoint.api_format"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium tracking-wide uppercase leading-none"
+              :class="getEndpointTagClass(endpoint, provider)"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full"
+                :class="getEndpointDotColor(endpoint, provider)"
+              />
+              {{ endpoint.api_format }}
+            </span>
+          </div>
+
+          <!-- 第四行：配额/限流 -->
+          <div
+            v-if="provider.billing_type === 'monthly_quota' || rpmUsage(provider)"
+            class="flex items-center gap-3 text-xs text-muted-foreground"
+          >
+            <span v-if="provider.billing_type === 'monthly_quota'">
+              配额: <span
+                class="font-semibold"
+                :class="getQuotaUsedColorClass(provider)"
+              >${{ (provider.monthly_used_usd ?? 0).toFixed(2) }}</span> / ${{ (provider.monthly_quota_usd ?? 0).toFixed(2) }}
+            </span>
+            <span v-if="rpmUsage(provider)">
+              RPM: {{ rpmUsage(provider) }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- 分页 -->

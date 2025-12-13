@@ -365,21 +365,19 @@ onBeforeUnmount(() => {
 
     <!-- 缓存亲和性列表 -->
     <Card class="overflow-hidden">
-      <div class="px-6 py-3 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div class="flex items-center gap-3">
-            <h3 class="text-base font-semibold">
-              亲和性列表
-            </h3>
-          </div>
-          <div class="flex items-center gap-2">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <h3 class="text-sm sm:text-base font-semibold shrink-0">
+            亲和性列表
+          </h3>
+          <div class="flex flex-wrap items-center gap-2">
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
               <Input
                 id="cache-affinity-search"
                 v-model="tableKeyword"
                 placeholder="搜索用户或 Key"
-                class="w-48 h-8 text-sm pl-8 pr-8"
+                class="w-32 sm:w-48 h-8 text-sm pl-8 pr-8"
               />
               <button
                 v-if="tableKeyword"
@@ -390,7 +388,7 @@ onBeforeUnmount(() => {
                 <X class="h-3.5 w-3.5" />
               </button>
             </div>
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
             <Button
               variant="ghost"
               size="icon"
@@ -408,7 +406,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <Table>
+      <Table class="hidden xl:table">
         <TableHeader>
           <TableRow>
             <TableHead class="w-36">
@@ -537,6 +535,60 @@ onBeforeUnmount(() => {
         </TableBody>
       </Table>
 
+      <!-- 移动端卡片列表 -->
+      <div
+        v-if="!listLoading && affinityList.length > 0"
+        class="xl:hidden divide-y divide-border/40"
+      >
+        <div
+          v-for="item in paginatedAffinityList"
+          :key="`m-${item.affinity_key}-${item.endpoint_id}-${item.key_id}`"
+          class="p-4 space-y-2"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5">
+                <Badge
+                  v-if="item.is_standalone"
+                  variant="outline"
+                  class="text-warning border-warning/30 text-[10px] px-1"
+                >
+                  独立
+                </Badge>
+                <span class="text-sm font-medium truncate">{{ item.username || '未知' }}</span>
+              </div>
+              <div class="text-xs text-muted-foreground mt-0.5">
+                {{ item.user_api_key_name || '未命名' }} · {{ item.user_api_key_prefix || '---' }}
+              </div>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-7 w-7 text-muted-foreground/70 hover:text-destructive shrink-0"
+              :disabled="clearingRowAffinityKey === item.affinity_key"
+              @click="clearUserCache(item.affinity_key, item.user_api_key_name || item.affinity_key)"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{{ item.provider_name || '未知' }}</span>
+            <span>·</span>
+            <span class="truncate max-w-[100px]">{{ item.model_display_name || '---' }}</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-muted-foreground">{{ item.endpoint_api_format || '---' }}</span>
+            <span>{{ getRemainingTime(item.expire_at) }} · {{ item.request_count }}次</span>
+          </div>
+        </div>
+      </div>
+      <div
+        v-else-if="!listLoading && affinityList.length === 0"
+        class="xl:hidden text-center py-6 text-sm text-muted-foreground"
+      >
+        暂无缓存记录
+      </div>
+
       <Pagination
         v-if="affinityList.length > 0"
         :current="currentPage"
@@ -549,18 +601,18 @@ onBeforeUnmount(() => {
 
     <!-- TTL 分析区域 -->
     <Card class="overflow-hidden">
-      <div class="px-6 py-3 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <div class="flex items-center gap-3">
-            <BarChart3 class="h-5 w-5 text-muted-foreground" />
-            <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div class="flex items-center gap-3 shrink-0">
+            <BarChart3 class="h-5 w-5 text-muted-foreground hidden sm:block" />
+            <h3 class="text-sm sm:text-base font-semibold">
               TTL 分析
             </h3>
-            <span class="text-xs text-muted-foreground">分析用户请求间隔，推荐合适的缓存 TTL</span>
+            <span class="text-xs text-muted-foreground hidden sm:inline">分析用户请求间隔，推荐合适的缓存 TTL</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <Select v-model="analysisHours">
-              <SelectTrigger class="w-28 h-8">
+              <SelectTrigger class="w-24 sm:w-28 h-8">
                 <SelectValue placeholder="时间段" />
               </SelectTrigger>
               <SelectContent>

@@ -6,9 +6,9 @@
       class="overflow-hidden"
     >
       <!-- 标题和操作栏 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <h3 class="text-sm sm:text-base font-semibold shrink-0">
             我的 API Keys
           </h3>
 

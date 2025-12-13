@@ -9,7 +9,7 @@
       <IntervalTimelineCard
         :title="isAdminPage ? '请求间隔时间线' : '我的请求间隔'"
         :is-admin="isAdminPage"
-        :hours="168"
+        :hours="24"
       />
     </div>
 

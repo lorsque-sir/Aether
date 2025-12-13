@@ -2,12 +2,12 @@
   <div class="flex flex-col">
     <Card class="overflow-hidden">
       <!-- 搜索和过滤区域 -->
-      <div class="px-6 py-3.5 border-b border-border/60">
-        <div class="flex items-center justify-between gap-4">
-          <h3 class="text-base font-semibold">
+      <div class="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-border/60">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <h3 class="text-sm sm:text-base font-semibold shrink-0">
             别名管理
           </h3>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- 搜索框 -->
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
@@ -15,11 +15,11 @@
                 id="alias-search"
                 v-model="aliasesSearch"
                 placeholder="搜索别名或关联模型"
-                class="w-44 pl-8 pr-3 h-8 text-sm border-border/60 focus-visible:ring-1"
+                class="w-32 sm:w-44 pl-8 pr-3 h-8 text-sm border-border/60 focus-visible:ring-1"
               />
             </div>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 提供商过滤器 -->
             <Select
@@ -27,7 +27,7 @@
               :model-value="aliasProviderFilter"
               @update:model-value="aliasProviderFilter = $event"
             >
-              <SelectTrigger class="w-40 h-8 text-xs border-border/60">
+              <SelectTrigger class="w-28 sm:w-40 h-8 text-xs border-border/60">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -47,7 +47,7 @@
               </SelectContent>
             </Select>
 
-            <div class="h-4 w-px bg-border" />
+            <div class="hidden sm:block h-4 w-px bg-border" />
 
             <!-- 操作按钮 -->
             <Button
@@ -73,7 +73,7 @@
         <Loader2 class="w-10 h-10 animate-spin text-primary" />
       </div>
       <div v-else>
-        <Table class="text-sm">
+        <Table class="hidden xl:table text-sm">
           <TableHeader>
             <TableRow>
               <TableHead class="w-[200px]">
@@ -184,6 +184,83 @@
             </TableRow>
           </TableBody>
         </Table>
+
+        <!-- 移动端卡片列表 -->
+        <div
+          v-if="filteredAliases.length > 0"
+          class="xl:hidden divide-y divide-border/40"
+        >
+          <div
+            v-for="alias in paginatedAliases"
+            :key="alias.id"
+            class="p-4 space-y-2"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-medium truncate">{{ alias.alias }}</span>
+                  <Badge
+                    :variant="alias.is_active ? 'default' : 'secondary'"
+                    class="text-xs shrink-0"
+                  >
+                    {{ alias.is_active ? '活跃' : '停用' }}
+                  </Badge>
+                </div>
+                <div class="text-xs text-muted-foreground mt-1">
+                  <span class="font-medium">{{ alias.global_model_display_name || alias.global_model_name }}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-0.5 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="openEditAliasDialog(alias)"
+                >
+                  <Edit class="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="toggleAliasStatus(alias)"
+                >
+                  <Power class="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  @click="confirmDeleteAlias(alias)"
+                >
+                  <Trash2 class="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <Badge
+                variant="secondary"
+                class="text-xs"
+              >
+                {{ alias.mapping_type === 'mapping' ? '映射' : '别名' }}
+              </Badge>
+              <Badge
+                v-if="alias.provider_id"
+                variant="outline"
+                class="text-xs"
+              >
+                {{ alias.provider_name || 'Provider 特定' }}
+              </Badge>
+              <Badge
+                v-else
+                variant="default"
+                class="text-xs"
+              >
+                全局
+              </Badge>
+            </div>
+          </div>
+        </div>
 
         <!-- 分页 -->
         <Pagination
