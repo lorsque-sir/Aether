@@ -50,6 +50,7 @@ class ModelService:
                 provider_id=provider_id,
                 global_model_id=model_data.global_model_id,
                 provider_model_name=model_data.provider_model_name,
+                provider_model_aliases=model_data.provider_model_aliases,
                 price_per_request=model_data.price_per_request,
                 tiered_pricing=model_data.tiered_pricing,
                 supports_vision=model_data.supports_vision,
@@ -191,7 +192,6 @@ class ModelService:
         新架构删除逻辑：
         - Model 只是 Provider 对 GlobalModel 的实现，删除不影响 GlobalModel
         - 检查是否是该 GlobalModel 的最后一个实现（如果是，警告但允许删除）
-        - 不检查 ModelMapping（映射是 GlobalModel 之间的关系，别名也统一存储在此表中）
         """
         model = db.query(Model).filter(Model.id == model_id).first()
         if not model:
@@ -326,6 +326,7 @@ class ModelService:
             provider_id=model.provider_id,
             global_model_id=model.global_model_id,
             provider_model_name=model.provider_model_name,
+            provider_model_aliases=model.provider_model_aliases,
             # 原始配置值（可能为空）
             price_per_request=model.price_per_request,
             tiered_pricing=model.tiered_pricing,

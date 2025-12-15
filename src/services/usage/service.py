@@ -26,11 +26,10 @@ class UsageService:
     ) -> tuple[float, float]:
         """异步获取模型价格（输入价格，输出价格）每1M tokens
 
-        新架构查找逻辑：
-        1. 使用 ModelMappingResolver 解析别名（如果是）
-        2. 解析为 GlobalModel.name
-        3. 查找该 Provider 的 Model 实现并获取价格
-        4. 如果找不到则使用系统默认价格
+        查找逻辑：
+        1. 直接通过 GlobalModel.name 匹配
+        2. 查找该 Provider 的 Model 实现并获取价格
+        3. 如果找不到则使用系统默认价格
         """
 
         service = ModelCostService(db)
@@ -40,11 +39,10 @@ class UsageService:
     def get_model_price(cls, db: Session, provider: str, model: str) -> tuple[float, float]:
         """获取模型价格（输入价格，输出价格）每1M tokens
 
-        新架构查找逻辑：
-        1. 使用 ModelMappingResolver 解析别名（如果是）
-        2. 解析为 GlobalModel.name
-        3. 查找该 Provider 的 Model 实现并获取价格
-        4. 如果找不到则使用系统默认价格
+        查找逻辑：
+        1. 直接通过 GlobalModel.name 匹配
+        2. 查找该 Provider 的 Model 实现并获取价格
+        3. 如果找不到则使用系统默认价格
         """
 
         service = ModelCostService(db)

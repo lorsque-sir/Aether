@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from src.core.exceptions import InvalidRequestException, NotFoundException
 from src.core.logger import logger
-from src.models.database import GlobalModel, Model, ModelMapping
+from src.models.database import GlobalModel, Model
 from src.models.pydantic_models import GlobalModelUpdate
 
 

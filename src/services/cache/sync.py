@@ -6,7 +6,7 @@
 
 使用场景：
 1. 多实例部署时，确保所有实例的缓存一致性
-2. GlobalModel/ModelMapping 变更时，同步失效所有实例的缓存
+2. GlobalModel/Model 变更时，同步失效所有实例的缓存
 """
 
 import asyncio
@@ -29,7 +29,6 @@ class CacheSyncService:
 
     # Redis 频道名称
     CHANNEL_GLOBAL_MODEL = "cache:invalidate:global_model"
-    CHANNEL_MODEL_MAPPING = "cache:invalidate:model_mapping"
     CHANNEL_MODEL = "cache:invalidate:model"
     CHANNEL_CLEAR_ALL = "cache:invalidate:clear_all"
 
@@ -58,7 +57,6 @@ class CacheSyncService:
             # 订阅所有缓存失效频道
             await self._pubsub.subscribe(
                 self.CHANNEL_GLOBAL_MODEL,
-                self.CHANNEL_MODEL_MAPPING,
                 self.CHANNEL_MODEL,
                 self.CHANNEL_CLEAR_ALL,
             )
@@ -68,7 +66,7 @@ class CacheSyncService:
             self._running = True
 
             logger.info("[CacheSync] 缓存同步服务已启动，订阅频道: "
-                f"{self.CHANNEL_GLOBAL_MODEL}, {self.CHANNEL_MODEL_MAPPING}, "
+                f"{self.CHANNEL_GLOBAL_MODEL}, "
                 f"{self.CHANNEL_MODEL}, {self.CHANNEL_CLEAR_ALL}")
         except Exception as e:
             logger.error(f"[CacheSync] 启动失败: {e}")
@@ -140,14 +138,6 @@ class CacheSyncService:
     async def publish_global_model_changed(self, model_name: str):
         """发布 GlobalModel 变更通知"""
         await self._publish(self.CHANNEL_GLOBAL_MODEL, {"model_name": model_name})
-
-    async def publish_model_mapping_changed(
-        self, source_model: str, provider_id: Optional[str] = None
-    ):
-        """发布 ModelMapping 变更通知"""
-        await self._publish(
-            self.CHANNEL_MODEL_MAPPING, {"source_model": source_model, "provider_id": provider_id}
-        )
 
     async def publish_model_changed(self, provider_id: str, global_model_id: str):
         """发布 Model 变更通知"""

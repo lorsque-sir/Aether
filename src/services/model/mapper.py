@@ -5,18 +5,13 @@
 
 from typing import Dict, List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from src.core.cache_utils import SyncLRUCache
 from src.core.logger import logger
 from src.models.claude import ClaudeMessagesRequest
-from src.models.database import GlobalModel, Model, ModelMapping, Provider, ProviderEndpoint
+from src.models.database import GlobalModel, Model, Provider, ProviderEndpoint
 from src.services.cache.model_cache import ModelCacheService
-from src.services.model.mapping_resolver import (
-    get_model_mapping_resolver,
-    resolve_model_to_global_name,
-)
-
 
 
 class ModelMapperMiddleware:
@@ -71,10 +66,10 @@ class ModelMapperMiddleware:
         if mapping:
             # 应用映射
             original_model = request.model
-            request.model = mapping.model.provider_model_name
+            request.model = mapping.model.select_provider_model_name()
 
             logger.debug(f"Applied model mapping for provider {provider.name}: "
-                f"{original_model} -> {mapping.model.provider_model_name}")
+                f"{original_model} -> {request.model}")
         else:
             # 没有找到映射，使用原始模型名
             logger.debug(f"No model mapping found for {source_model} with provider {provider.name}, "
@@ -84,17 +79,16 @@ class ModelMapperMiddleware:
 
     async def get_mapping(
         self, source_model: str, provider_id: str
-    ) -> Optional[ModelMapping]:  # UUID
+    ) -> Optional[object]:
         """
         获取模型映射
 
-        优化后逻辑:
-        1. 使用统一的 ModelMappingResolver 解析别名（带缓存）
-        2. 通过 GlobalModel 找到该 Provider 的 Model 实现
-        3. 使用独立的映射缓存
+        简化后的逻辑:
+        1. 通过 GlobalModel.name 直接查找
+        2. 找到 GlobalModel 后，查找该 Provider 的 Model 实现
 
         Args:
-            source_model: 用户请求的模型名或别名
+            source_model: 用户请求的模型名（必须是 GlobalModel.name）
             provider_id: 提供商ID (UUID)
 
         Returns:
@@ -107,62 +101,59 @@ class ModelMapperMiddleware:
 
         mapping = None
 
-        # 步骤 1 & 2: 通过统一的模型映射解析服务
-        mapping_resolver = get_model_mapping_resolver()
-        global_model = await mapping_resolver.get_global_model_by_request(
-            self.db, source_model, provider_id
+        # 步骤 1: 直接通过名称查找 GlobalModel
+        global_model = (
+            self.db.query(GlobalModel)
+            .filter(GlobalModel.name == source_model, GlobalModel.is_active == True)
+            .first()
         )
 
         if not global_model:
-            logger.debug(f"GlobalModel not found: {source_model} (provider={provider_id[:8]}...)")
+            logger.debug(f"GlobalModel not found: {source_model}")
             self._cache[cache_key] = None
             return None
 
-        # 步骤 3: 查找该 Provider 是否有实现这个 GlobalModel 的 Model（使用缓存）
+        # 步骤 2: 查找该 Provider 是否有实现这个 GlobalModel 的 Model（使用缓存）
         model = await ModelCacheService.get_model_by_provider_and_global_model(
             self.db, provider_id, global_model.id
         )
 
         if model:
-            # 只有当模型名发生变化时才返回映射
-            if model.provider_model_name != source_model:
-                mapping = type(
-                    "obj",
-                    (object,),
-                    {
-                        "source_model": source_model,
-                        "model": model,
-                        "is_active": True,
-                        "provider_id": provider_id,
-                    },
-                )()
+            # 创建映射对象
+            mapping = type(
+                "obj",
+                (object,),
+                {
+                    "source_model": source_model,
+                    "model": model,
+                    "is_active": True,
+                    "provider_id": provider_id,
+                },
+            )()
 
-                logger.debug(f"Found model mapping: {source_model} -> {model.provider_model_name} "
-                    f"(provider={provider_id[:8]}...)")
-            else:
-                logger.debug(f"Model found but no name change: {source_model} (provider={provider_id[:8]}...)")
+            logger.debug(f"Found model mapping: {source_model} -> {model.provider_model_name} "
+                f"(provider={provider_id[:8]}...)")
 
         # 缓存结果
         self._cache[cache_key] = mapping
 
         return mapping
 
-    def get_all_mappings(self, provider_id: str) -> List[ModelMapping]:  # UUID
+    def get_all_mappings(self, provider_id: str) -> List[object]:
         """
         获取提供商的所有可用模型(通过 GlobalModel)
-
-        方案 A: 返回该 Provider 所有可用的 GlobalModel
 
         Args:
             provider_id: 提供商ID (UUID)
 
         Returns:
-            模型映射列表（模拟的 ModelMapping 对象列表）
+            模型映射列表
         """
-        # 查询该 Provider 的所有活跃 Model
+        # 查询该 Provider 的所有活跃 Model（使用 joinedload 避免 N+1）
         models = (
             self.db.query(Model)
             .join(GlobalModel)
+            .options(joinedload(Model.global_model))
             .filter(
                 Model.provider_id == provider_id,
                 Model.is_active == True,
@@ -171,7 +162,7 @@ class ModelMapperMiddleware:
             .all()
         )
 
-        # 构造兼容的 ModelMapping 对象列表
+        # 构造兼容的映射对象列表
         mappings = []
         for model in models:
             mapping = type(
@@ -188,7 +179,7 @@ class ModelMapperMiddleware:
 
         return mappings
 
-    def get_supported_models(self, provider_id: str) -> List[str]:  # UUID
+    def get_supported_models(self, provider_id: str) -> List[str]:
         """
         获取提供商支持的所有源模型名
 
@@ -223,15 +214,6 @@ class ModelMapperMiddleware:
         if not mapping.is_active:
             return False, f"Model mapping for {request.model} is disabled"
 
-        # 不限制max_tokens，作为中转服务不应该限制用户的请求
-        # if request.max_tokens and request.max_tokens > mapping.max_output_tokens:
-        #     return False, (
-        #         f"Requested max_tokens {request.max_tokens} exceeds limit "
-        #         f"{mapping.max_output_tokens} for model {request.model}"
-        #     )
-
-        # 可以添加更多验证逻辑，比如检查输入长度等
-
         return True, None
 
     def clear_cache(self):
@@ -239,7 +221,7 @@ class ModelMapperMiddleware:
         self._cache.clear()
         logger.debug("Model mapping cache cleared")
 
-    def refresh_cache(self, provider_id: Optional[str] = None):  # UUID
+    def refresh_cache(self, provider_id: Optional[str] = None):
         """
         刷新缓存
 
@@ -285,16 +267,10 @@ class ModelRoutingMiddleware:
         """
         根据模型名选择提供商
 
-        逻辑：
-        1. 如果指定了提供商，使用指定的提供商
-        2. 如果没指定，使用默认提供商
-        3. 选定提供商后，会检查该提供商的模型映射（在apply_mapping中处理）
-        4. 如果指定了allowed_api_formats，只选择符合格式的提供商
-
         Args:
             model_name: 请求的模型名
             preferred_provider: 首选提供商名称
-            allowed_api_formats: 允许的API格式列表（如 ['CLAUDE', 'CLAUDE_CLI']）
+            allowed_api_formats: 允许的API格式列表
             request_id: 请求ID（用于日志关联）
 
         Returns:
@@ -313,14 +289,12 @@ class ModelRoutingMiddleware:
             if provider:
                 # 检查API格式 - 从 endpoints 中检查
                 if allowed_api_formats:
-                    # 检查是否有符合要求的活跃端点
                     has_matching_endpoint = any(
                         ep.is_active and ep.api_format and ep.api_format in allowed_api_formats
                         for ep in provider.endpoints
                     )
                     if not has_matching_endpoint:
                         logger.warning(f"Specified provider {provider.name} has no active endpoints with allowed API formats ({allowed_api_formats})")
-                        # 不返回该提供商，继续查找
                     else:
                         logger.debug(f"  └─ {request_prefix}使用指定提供商: {provider.name} | 模型:{model_name}")
                         return provider
@@ -330,10 +304,9 @@ class ModelRoutingMiddleware:
             else:
                 logger.warning(f"Specified provider {preferred_provider} not found or inactive")
 
-        # 2. 查找优先级最高的活动提供商（provider_priority 最小）
+        # 2. 查找优先级最高的活动提供商
         query = self.db.query(Provider).filter(Provider.is_active == True)
 
-        # 如果指定了API格式过滤，添加过滤条件 - 检查是否有符合要求的 endpoint
         if allowed_api_formats:
             query = (
                 query.join(ProviderEndpoint)
@@ -344,32 +317,27 @@ class ModelRoutingMiddleware:
                 .distinct()
             )
 
-        # 按 provider_priority 排序，优先级最高（数字最小）的在前
         best_provider = query.order_by(Provider.provider_priority.asc(), Provider.id.asc()).first()
 
         if best_provider:
             logger.debug(f"  └─ {request_prefix}使用优先级最高提供商: {best_provider.name} (priority:{best_provider.provider_priority}) | 模型:{model_name}")
             return best_provider
 
-        # 3. 没有任何活动提供商
         if allowed_api_formats:
-            logger.error(f"No active providers found with allowed API formats {allowed_api_formats}. Please configure at least one provider.")
+            logger.error(f"No active providers found with allowed API formats {allowed_api_formats}.")
         else:
-            logger.error("No active providers found. Please configure at least one provider.")
+            logger.error("No active providers found.")
         return None
 
     def get_available_models(self) -> Dict[str, List[str]]:
         """
         获取所有可用的模型及其提供商
 
-        方案 A: 基于 GlobalModel 查询
-
         Returns:
             字典，键为 GlobalModel.name，值为支持该模型的提供商名列表
         """
         result = {}
 
-        # 查询所有活跃的 GlobalModel 及其 Provider
         models = (
             self.db.query(GlobalModel.name, Provider.name)
             .join(Model, GlobalModel.id == Model.global_model_id)
@@ -392,28 +360,23 @@ class ModelRoutingMiddleware:
         """
         获取某个模型最便宜的提供商
 
-        方案 A: 通过 GlobalModel 查找
-
         Args:
-            model_name: GlobalModel 名称或别名
+            model_name: GlobalModel 名称
 
         Returns:
             最便宜的提供商
         """
-        # 步骤 1: 解析模型名
-        global_model_name = await resolve_model_to_global_name(self.db, model_name)
-
-        # 步骤 2: 查找 GlobalModel
+        # 直接查找 GlobalModel
         global_model = (
             self.db.query(GlobalModel)
-            .filter(GlobalModel.name == global_model_name, GlobalModel.is_active == True)
+            .filter(GlobalModel.name == model_name, GlobalModel.is_active == True)
             .first()
         )
 
         if not global_model:
             return None
 
-        # 步骤 3: 查询所有支持该模型的 Provider 及其价格
+        # 查询所有支持该模型的 Provider 及其价格
         models_with_providers = (
             self.db.query(Provider, Model)
             .join(Model, Provider.id == Model.provider_id)
@@ -428,15 +391,16 @@ class ModelRoutingMiddleware:
         if not models_with_providers:
             return None
 
-        # 按总价格排序（输入+输出价格）
+        # 按总价格排序
         cheapest = min(
-            models_with_providers, key=lambda x: x[1].input_price_per_1m + x[1].output_price_per_1m
+            models_with_providers,
+            key=lambda x: x[1].get_effective_input_price() + x[1].get_effective_output_price()
         )
 
         provider = cheapest[0]
         model = cheapest[1]
 
         logger.debug(f"Selected cheapest provider {provider.name} for model {model_name} "
-            f"(input: ${model.input_price_per_1m}/M, output: ${model.output_price_per_1m}/M)")
+            f"(input: ${model.get_effective_input_price()}/M, output: ${model.get_effective_output_price()}/M)")
 
         return provider

@@ -6,8 +6,7 @@
 2. RedisCache: Redis 缓存（分布式）
 
 使用场景：
-- ModelMappingResolver: 模型映射与别名解析缓存
-- ModelMapper: 模型映射缓存
+- ModelCacheService: 模型解析缓存
 - 其他需要缓存的服务
 """
 

@@ -1,5 +1,5 @@
 """
-Model 映射缓存服务 - 减少模型映射和别名查询
+Model 映射缓存服务 - 减少模型查询
 """
 
 from typing import Optional
@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 from src.config.constants import CacheTTL
 from src.core.cache_service import CacheService
 from src.core.logger import logger
-from src.models.database import GlobalModel, Model, ModelMapping
-
+from src.models.database import GlobalModel, Model
 
 
 class ModelCacheService:
@@ -159,56 +158,6 @@ class ModelCacheService:
         return global_model
 
     @staticmethod
-    async def resolve_alias(
-        db: Session, source_model: str, provider_id: Optional[str] = None
-    ) -> Optional[str]:
-        """
-        解析模型别名（带缓存）
-
-        Args:
-            db: 数据库会话
-            source_model: 源模型名称或别名
-            provider_id: Provider ID（可选，用于 Provider 特定别名）
-
-        Returns:
-            目标 GlobalModel ID 或 None
-        """
-        # 构造缓存键
-        if provider_id:
-            cache_key = f"alias:provider:{provider_id}:{source_model}"
-        else:
-            cache_key = f"alias:global:{source_model}"
-
-        # 1. 尝试从缓存获取
-        cached_result = await CacheService.get(cache_key)
-        if cached_result:
-            logger.debug(f"别名缓存命中: {source_model} (provider: {provider_id or 'global'})")
-            return cached_result
-
-        # 2. 缓存未命中，查询数据库
-        query = db.query(ModelMapping).filter(ModelMapping.source_model == source_model)
-
-        if provider_id:
-            # Provider 特定别名优先
-            query = query.filter(ModelMapping.provider_id == provider_id)
-        else:
-            # 全局别名
-            query = query.filter(ModelMapping.provider_id.is_(None))
-
-        mapping = query.first()
-
-        # 3. 写入缓存
-        target_global_model_id = mapping.target_global_model_id if mapping else None
-        await CacheService.set(
-            cache_key, target_global_model_id, ttl_seconds=ModelCacheService.CACHE_TTL
-        )
-
-        if mapping:
-            logger.debug(f"别名已缓存: {source_model} → {target_global_model_id}")
-
-        return target_global_model_id
-
-    @staticmethod
     async def invalidate_model_cache(
         model_id: str, provider_id: Optional[str] = None, global_model_id: Optional[str] = None
     ):
@@ -238,17 +187,6 @@ class ModelCacheService:
         logger.debug(f"GlobalModel 缓存已清除: {global_model_id}")
 
     @staticmethod
-    async def invalidate_alias_cache(source_model: str, provider_id: Optional[str] = None):
-        """清除别名缓存"""
-        if provider_id:
-            cache_key = f"alias:provider:{provider_id}:{source_model}"
-        else:
-            cache_key = f"alias:global:{source_model}"
-
-        await CacheService.delete(cache_key)
-        logger.debug(f"别名缓存已清除: {source_model}")
-
-    @staticmethod
     def _model_to_dict(model: Model) -> dict:
         """将 Model 对象转换为字典"""
         return {
@@ -256,6 +194,7 @@ class ModelCacheService:
             "provider_id": model.provider_id,
             "global_model_id": model.global_model_id,
             "provider_model_name": model.provider_model_name,
+            "provider_model_aliases": getattr(model, "provider_model_aliases", None),
             "is_active": model.is_active,
             "is_available": model.is_available if hasattr(model, "is_available") else True,
             "price_per_request": (
@@ -266,6 +205,7 @@ class ModelCacheService:
             "supports_function_calling": model.supports_function_calling,
             "supports_streaming": model.supports_streaming,
             "supports_extended_thinking": model.supports_extended_thinking,
+            "supports_image_generation": getattr(model, "supports_image_generation", None),
             "config": model.config,
         }
 
@@ -277,6 +217,7 @@ class ModelCacheService:
             provider_id=model_dict["provider_id"],
             global_model_id=model_dict["global_model_id"],
             provider_model_name=model_dict["provider_model_name"],
+            provider_model_aliases=model_dict.get("provider_model_aliases"),
             is_active=model_dict["is_active"],
             is_available=model_dict.get("is_available", True),
             price_per_request=model_dict.get("price_per_request"),
@@ -285,6 +226,7 @@ class ModelCacheService:
             supports_function_calling=model_dict.get("supports_function_calling"),
             supports_streaming=model_dict.get("supports_streaming"),
             supports_extended_thinking=model_dict.get("supports_extended_thinking"),
+            supports_image_generation=model_dict.get("supports_image_generation"),
             config=model_dict.get("config"),
         )
         return model
@@ -296,12 +238,11 @@ class ModelCacheService:
             "id": global_model.id,
             "name": global_model.name,
             "display_name": global_model.display_name,
-            "family": global_model.family,
-            "group_id": global_model.group_id,
-            "supports_vision": global_model.supports_vision,
-            "supports_thinking": global_model.supports_thinking,
-            "context_window": global_model.context_window,
-            "max_output_tokens": global_model.max_output_tokens,
+            "default_supports_vision": global_model.default_supports_vision,
+            "default_supports_function_calling": global_model.default_supports_function_calling,
+            "default_supports_streaming": global_model.default_supports_streaming,
+            "default_supports_extended_thinking": global_model.default_supports_extended_thinking,
+            "default_supports_image_generation": global_model.default_supports_image_generation,
             "is_active": global_model.is_active,
             "description": global_model.description,
         }
@@ -313,12 +254,11 @@ class ModelCacheService:
             id=global_model_dict["id"],
             name=global_model_dict["name"],
             display_name=global_model_dict.get("display_name"),
-            family=global_model_dict.get("family"),
-            group_id=global_model_dict.get("group_id"),
-            supports_vision=global_model_dict.get("supports_vision", False),
-            supports_thinking=global_model_dict.get("supports_thinking", False),
-            context_window=global_model_dict.get("context_window"),
-            max_output_tokens=global_model_dict.get("max_output_tokens"),
+            default_supports_vision=global_model_dict.get("default_supports_vision", False),
+            default_supports_function_calling=global_model_dict.get("default_supports_function_calling", False),
+            default_supports_streaming=global_model_dict.get("default_supports_streaming", True),
+            default_supports_extended_thinking=global_model_dict.get("default_supports_extended_thinking", False),
+            default_supports_image_generation=global_model_dict.get("default_supports_image_generation", False),
             is_active=global_model_dict.get("is_active", True),
             description=global_model_dict.get("description"),
         )

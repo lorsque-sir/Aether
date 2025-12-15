@@ -7,11 +7,9 @@ from typing import Dict
 
 from sqlalchemy.orm import Session
 
-from src.core.logger import logger
 from src.models.database import GlobalModel, Model, Provider
 from src.services.model.cost import ModelCostService
 from src.services.model.mapper import ModelMapperMiddleware, ModelRoutingMiddleware
-
 
 
 class ProviderService:
@@ -34,30 +32,15 @@ class ProviderService:
         检查模型是否可用（严格白名单模式）
 
         Args:
-            model_name: 模型名称
+            model_name: 模型名称（必须是 GlobalModel.name）
 
         Returns:
             Model对象如果存在且激活，否则None
         """
-        # 首先检查是否有直接的模型记录
-        model = (
-            self.db.query(Model)
-            .filter(Model.provider_model_name == model_name, Model.is_active == True)
-            .first()
-        )
-
-        if model:
-            return model
-
-        # 方案 A：检查是否是别名（全局别名系统）
-        from src.services.model.mapping_resolver import resolve_model_to_global_name
-
-        global_model_name = await resolve_model_to_global_name(self.db, model_name)
-
-        # 查找 GlobalModel
+        # 直接查找 GlobalModel
         global_model = (
             self.db.query(GlobalModel)
-            .filter(GlobalModel.name == global_model_name, GlobalModel.is_active == True)
+            .filter(GlobalModel.name == model_name, GlobalModel.is_active == True)
             .first()
         )
 
@@ -79,34 +62,15 @@ class ProviderService:
 
         Args:
             provider_id: 提供商ID
-            model_name: 模型名称
+            model_name: 模型名称（必须是 GlobalModel.name）
 
         Returns:
             Model对象如果该提供商支持该模型且激活，否则None
         """
-        # 首先检查该提供商下是否有直接的模型记录
-        model = (
-            self.db.query(Model)
-            .filter(
-                Model.provider_id == provider_id,
-                Model.provider_model_name == model_name,
-                Model.is_active == True,
-            )
-            .first()
-        )
-
-        if model:
-            return model
-
-        # 方案 A：检查是否是别名
-        from src.services.model.mapping_resolver import resolve_model_to_global_name
-
-        global_model_name = await resolve_model_to_global_name(self.db, model_name, provider_id)
-
-        # 查找 GlobalModel
+        # 直接查找 GlobalModel
         global_model = (
             self.db.query(GlobalModel)
-            .filter(GlobalModel.name == global_model_name, GlobalModel.is_active == True)
+            .filter(GlobalModel.name == model_name, GlobalModel.is_active == True)
             .first()
         )
 
@@ -148,12 +112,19 @@ class ProviderService:
         获取所有可用的模型
 
         Returns:
-            模型和支持的提供商映射
+            字典，键为模型名，值为提供商列表
         """
         return self.router.get_available_models()
 
-    def clear_cache(self):
-        """清空缓存"""
-        self.mapper.clear_cache()
-        self.cost_service.clear_cache()
-        logger.info("Provider service cache cleared")
+    def select_provider(self, model_name: str, preferred_provider=None):
+        """
+        选择提供商
+
+        Args:
+            model_name: 模型名
+            preferred_provider: 首选提供商
+
+        Returns:
+            Provider对象
+        """
+        return self.router.select_provider(model_name, preferred_provider)
