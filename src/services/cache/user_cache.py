@@ -1,5 +1,22 @@
 """
 用户缓存服务 - 减少数据库查询
+
+架构说明
+========
+本服务采用混合 async/sync 模式：
+- 缓存操作（CacheService）：真正的 async，使用 aioredis
+- 数据库查询（db.query）：同步的 SQLAlchemy Session
+
+设计决策
+--------
+1. 保持 async 方法签名：因为缓存命中时完全异步，性能最优
+2. 缓存未命中时的同步查询：FastAPI 会在线程池中执行，不会阻塞事件循环
+3. 调用方必须在 async 上下文中使用 await
+
+使用示例
+--------
+    user = await UserCacheService.get_user_by_id(db, user_id)
+    await UserCacheService.invalidate_user_cache(user_id, email)
 """
 
 from typing import Optional
@@ -12,9 +29,12 @@ from src.core.logger import logger
 from src.models.database import User
 
 
-
 class UserCacheService:
-    """用户缓存服务"""
+    """用户缓存服务
+
+    提供 User 的缓存查询功能，减少数据库访问。
+    所有公开方法均为 async，需要在 async 上下文中调用。
+    """
 
     # 缓存 TTL（秒）- 使用统一常量
     CACHE_TTL = CacheTTL.USER

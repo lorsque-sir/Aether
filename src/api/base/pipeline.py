@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Optional, Tuple
 
 from fastapi import HTTPException, Request
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from src.core.exceptions import QuotaExceededException
 from src.core.logger import logger
@@ -241,11 +241,15 @@ class ApiRequestPipeline:
         status_code: Optional[int] = None,
         error: Optional[str] = None,
     ) -> None:
+        """记录审计事件
+
+        事务策略：复用请求级 Session，不单独提交。
+        审计记录随主事务一起提交，由中间件统一管理。
+        """
         if not getattr(adapter, "audit_log_enabled", True):
             return
 
-        bind = context.db.get_bind()
-        if bind is None:
+        if context.db is None:
             return
 
         event_type = adapter.audit_success_event if success else adapter.audit_failure_event
@@ -265,11 +269,11 @@ class ApiRequestPipeline:
             error=error,
         )
 
-        SessionMaker = sessionmaker(bind=bind)
-        audit_session = SessionMaker()
         try:
+            # 复用请求级 Session，不创建新的连接
+            # 审计记录随主事务一起提交，由中间件统一管理
             self.audit_service.log_event(
-                db=audit_session,
+                db=context.db,
                 event_type=event_type,
                 description=f"{context.request.method} {context.request.url.path} via {adapter.name}",
                 user_id=context.user.id if context.user else None,
@@ -281,12 +285,9 @@ class ApiRequestPipeline:
                 error_message=error,
                 metadata=metadata,
             )
-            audit_session.commit()
         except Exception as exc:
-            audit_session.rollback()
+            # 审计失败不应影响主请求，仅记录警告
             logger.warning(f"[Audit] Failed to record event for adapter={adapter.name}: {exc}")
-        finally:
-            audit_session.close()
 
     def _build_audit_metadata(
         self,

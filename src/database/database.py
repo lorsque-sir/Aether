@@ -223,7 +223,18 @@ def _ensure_async_engine() -> AsyncEngine:
 
 
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
-    """获取异步数据库会话"""
+    """获取异步数据库会话
+
+    .. deprecated::
+        此方法已废弃，项目统一使用同步 Session。
+        未来版本可能移除此方法。请使用 get_db() 代替。
+    """
+    import warnings
+    warnings.warn(
+        "get_async_db() 已废弃，项目统一使用同步 Session。请使用 get_db() 代替。",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # 确保异步引擎已初始化
     _ensure_async_engine()
 
@@ -237,12 +248,34 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
 def get_db(request: Request = None) -> Generator[Session, None, None]:  # type: ignore[assignment]
     """获取数据库会话
 
-    注意：事务管理由业务逻辑层显式控制（手动调用 commit/rollback）
-    这里只负责会话的创建和关闭，不自动提交
+    事务策略说明
+    ============
+    本项目采用**混合事务管理**策略：
 
-    在 FastAPI 请求上下文中通过 Depends(get_db) 调用时，会自动注入 Request 对象，
-    支持中间件管理的 session 复用；在非请求上下文中直接调用 get_db() 时，
-    request 为 None，退化为独立 session 模式。
+    1. **LLM 请求路径**：
+       - 由 PluginMiddleware 统一管理事务
+       - Service 层使用 db.flush() 使更改可见，但不提交
+       - 请求结束时由中间件统一 commit 或 rollback
+       - 例外：UsageService.record_usage() 会显式 commit，因为使用记录需要立即持久化
+
+    2. **管理后台 API**：
+       - 路由层显式调用 db.commit()
+       - 每个操作独立提交，不依赖中间件
+
+    3. **后台任务/调度器**：
+       - 使用独立 Session（通过 create_session() 或 next(get_db())）
+       - 自行管理事务生命周期
+
+    使用方式
+    ========
+    - FastAPI 请求：通过 Depends(get_db) 注入，支持中间件管理的 session 复用
+    - 非请求上下文：直接调用 get_db()，退化为独立 session 模式
+
+    注意事项
+    ========
+    - 本函数不自动提交事务
+    - 异常时会自动回滚
+    - 中间件管理模式下，session 关闭由中间件负责
     """
     # FastAPI 请求上下文：优先复用中间件绑定的 request.state.db
     if request is not None:

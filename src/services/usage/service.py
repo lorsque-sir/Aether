@@ -20,6 +20,336 @@ from src.services.system.config import SystemConfigService
 class UsageService:
     """用量统计服务"""
 
+    # ==================== 内部数据类 ====================
+
+    @staticmethod
+    def _build_usage_params(
+        *,
+        db: Session,
+        user: Optional[User],
+        api_key: Optional[ApiKey],
+        provider: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_creation_input_tokens: int,
+        cache_read_input_tokens: int,
+        request_type: str,
+        api_format: Optional[str],
+        is_stream: bool,
+        response_time_ms: Optional[int],
+        first_byte_time_ms: Optional[int],
+        status_code: int,
+        error_message: Optional[str],
+        metadata: Optional[Dict[str, Any]],
+        request_headers: Optional[Dict[str, Any]],
+        request_body: Optional[Any],
+        provider_request_headers: Optional[Dict[str, Any]],
+        response_headers: Optional[Dict[str, Any]],
+        response_body: Optional[Any],
+        request_id: str,
+        provider_id: Optional[str],
+        provider_endpoint_id: Optional[str],
+        provider_api_key_id: Optional[str],
+        status: str,
+        target_model: Optional[str],
+        # 成本计算结果
+        input_cost: float,
+        output_cost: float,
+        cache_creation_cost: float,
+        cache_read_cost: float,
+        cache_cost: float,
+        request_cost: float,
+        total_cost: float,
+        # 价格信息
+        input_price: float,
+        output_price: float,
+        cache_creation_price: Optional[float],
+        cache_read_price: Optional[float],
+        request_price: Optional[float],
+        # 倍率
+        actual_rate_multiplier: float,
+        is_free_tier: bool,
+    ) -> Dict[str, Any]:
+        """构建 Usage 记录的参数字典（内部方法，避免代码重复）"""
+
+        # 根据配置决定是否记录请求详情
+        should_log_headers = SystemConfigService.should_log_headers(db)
+        should_log_body = SystemConfigService.should_log_body(db)
+
+        # 处理请求头（可能需要脱敏）
+        processed_request_headers = None
+        if should_log_headers and request_headers:
+            processed_request_headers = SystemConfigService.mask_sensitive_headers(
+                db, request_headers
+            )
+
+        # 处理提供商请求头（可能需要脱敏）
+        processed_provider_request_headers = None
+        if should_log_headers and provider_request_headers:
+            processed_provider_request_headers = SystemConfigService.mask_sensitive_headers(
+                db, provider_request_headers
+            )
+
+        # 处理请求体和响应体（可能需要截断）
+        processed_request_body = None
+        processed_response_body = None
+        if should_log_body:
+            if request_body:
+                processed_request_body = SystemConfigService.truncate_body(
+                    db, request_body, is_request=True
+                )
+            if response_body:
+                processed_response_body = SystemConfigService.truncate_body(
+                    db, response_body, is_request=False
+                )
+
+        # 处理响应头
+        processed_response_headers = None
+        if should_log_headers and response_headers:
+            processed_response_headers = SystemConfigService.mask_sensitive_headers(
+                db, response_headers
+            )
+
+        # 计算真实成本（表面成本 * 倍率），免费套餐实际费用为 0
+        if is_free_tier:
+            actual_input_cost = 0.0
+            actual_output_cost = 0.0
+            actual_cache_creation_cost = 0.0
+            actual_cache_read_cost = 0.0
+            actual_request_cost = 0.0
+            actual_total_cost = 0.0
+        else:
+            actual_input_cost = input_cost * actual_rate_multiplier
+            actual_output_cost = output_cost * actual_rate_multiplier
+            actual_cache_creation_cost = cache_creation_cost * actual_rate_multiplier
+            actual_cache_read_cost = cache_read_cost * actual_rate_multiplier
+            actual_request_cost = request_cost * actual_rate_multiplier
+            actual_total_cost = total_cost * actual_rate_multiplier
+
+        return {
+            "user_id": user.id if user else None,
+            "api_key_id": api_key.id if api_key else None,
+            "request_id": request_id,
+            "provider": provider,
+            "model": model,
+            "target_model": target_model,
+            "provider_id": provider_id,
+            "provider_endpoint_id": provider_endpoint_id,
+            "provider_api_key_id": provider_api_key_id,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "cache_creation_input_tokens": cache_creation_input_tokens,
+            "cache_read_input_tokens": cache_read_input_tokens,
+            "input_cost_usd": input_cost,
+            "output_cost_usd": output_cost,
+            "cache_cost_usd": cache_cost,
+            "cache_creation_cost_usd": cache_creation_cost,
+            "cache_read_cost_usd": cache_read_cost,
+            "request_cost_usd": request_cost,
+            "total_cost_usd": total_cost,
+            "actual_input_cost_usd": actual_input_cost,
+            "actual_output_cost_usd": actual_output_cost,
+            "actual_cache_creation_cost_usd": actual_cache_creation_cost,
+            "actual_cache_read_cost_usd": actual_cache_read_cost,
+            "actual_request_cost_usd": actual_request_cost,
+            "actual_total_cost_usd": actual_total_cost,
+            "rate_multiplier": actual_rate_multiplier,
+            "input_price_per_1m": input_price,
+            "output_price_per_1m": output_price,
+            "cache_creation_price_per_1m": cache_creation_price,
+            "cache_read_price_per_1m": cache_read_price,
+            "price_per_request": request_price,
+            "request_type": request_type,
+            "api_format": api_format,
+            "is_stream": is_stream,
+            "status_code": status_code,
+            "error_message": error_message,
+            "response_time_ms": response_time_ms,
+            "first_byte_time_ms": first_byte_time_ms,
+            "status": status,
+            "request_metadata": metadata,
+            "request_headers": processed_request_headers,
+            "request_body": processed_request_body,
+            "provider_request_headers": processed_provider_request_headers,
+            "response_headers": processed_response_headers,
+            "response_body": processed_response_body,
+        }
+
+    @classmethod
+    async def _get_rate_multiplier_and_free_tier(
+        cls,
+        db: Session,
+        provider_api_key_id: Optional[str],
+        provider_id: Optional[str],
+    ) -> Tuple[float, bool]:
+        """获取费率倍数和是否免费套餐"""
+        actual_rate_multiplier = 1.0
+        if provider_api_key_id:
+            provider_key = (
+                db.query(ProviderAPIKey).filter(ProviderAPIKey.id == provider_api_key_id).first()
+            )
+            if provider_key and provider_key.rate_multiplier:
+                actual_rate_multiplier = provider_key.rate_multiplier
+
+        is_free_tier = False
+        if provider_id:
+            provider_obj = db.query(Provider).filter(Provider.id == provider_id).first()
+            if provider_obj and provider_obj.billing_type == ProviderBillingType.FREE_TIER:
+                is_free_tier = True
+
+        return actual_rate_multiplier, is_free_tier
+
+    @classmethod
+    async def _calculate_costs(
+        cls,
+        db: Session,
+        provider: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_creation_input_tokens: int,
+        cache_read_input_tokens: int,
+        api_format: Optional[str],
+        cache_ttl_minutes: Optional[int],
+        use_tiered_pricing: bool,
+        is_failed_request: bool,
+    ) -> Tuple[float, float, float, float, float, float, float, float, float,
+               Optional[float], Optional[float], Optional[float], Optional[int]]:
+        """计算所有成本相关数据
+
+        Returns:
+            (input_price, output_price, cache_creation_price, cache_read_price, request_price,
+             input_cost, output_cost, cache_creation_cost, cache_read_cost, cache_cost,
+             request_cost, total_cost, tier_index)
+        """
+        # 获取模型价格信息
+        input_price, output_price = await cls.get_model_price_async(db, provider, model)
+        cache_creation_price, cache_read_price = await cls.get_cache_prices_async(
+            db, provider, model, input_price
+        )
+        request_price = await cls.get_request_price_async(db, provider, model)
+        effective_request_price = None if is_failed_request else request_price
+
+        # 初始化成本变量
+        input_cost = 0.0
+        output_cost = 0.0
+        cache_creation_cost = 0.0
+        cache_read_cost = 0.0
+        cache_cost = 0.0
+        request_cost = 0.0
+        total_cost = 0.0
+        tier_index = None
+
+        if use_tiered_pricing:
+            (
+                input_cost,
+                output_cost,
+                cache_creation_cost,
+                cache_read_cost,
+                cache_cost,
+                request_cost,
+                total_cost,
+                tier_index,
+            ) = await cls.calculate_cost_with_strategy_async(
+                db=db,
+                provider=provider,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_creation_input_tokens=cache_creation_input_tokens,
+                cache_read_input_tokens=cache_read_input_tokens,
+                api_format=api_format,
+                cache_ttl_minutes=cache_ttl_minutes,
+            )
+            if is_failed_request:
+                total_cost = total_cost - request_cost
+                request_cost = 0.0
+        else:
+            (
+                input_cost,
+                output_cost,
+                cache_creation_cost,
+                cache_read_cost,
+                cache_cost,
+                request_cost,
+                total_cost,
+            ) = cls.calculate_cost(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                input_price_per_1m=input_price,
+                output_price_per_1m=output_price,
+                cache_creation_input_tokens=cache_creation_input_tokens,
+                cache_read_input_tokens=cache_read_input_tokens,
+                cache_creation_price_per_1m=cache_creation_price,
+                cache_read_price_per_1m=cache_read_price,
+                price_per_request=effective_request_price,
+            )
+
+        return (
+            input_price, output_price, cache_creation_price, cache_read_price, request_price,
+            input_cost, output_cost, cache_creation_cost, cache_read_cost, cache_cost,
+            request_cost, total_cost, tier_index
+        )
+
+    @staticmethod
+    def _update_existing_usage(
+        existing_usage: Usage,
+        usage_params: Dict[str, Any],
+        target_model: Optional[str],
+    ) -> None:
+        """更新已存在的 Usage 记录（内部方法）"""
+        # 更新关键字段
+        existing_usage.provider = usage_params["provider"]
+        existing_usage.status = usage_params["status"]
+        existing_usage.status_code = usage_params["status_code"]
+        existing_usage.error_message = usage_params["error_message"]
+        existing_usage.response_time_ms = usage_params["response_time_ms"]
+        existing_usage.first_byte_time_ms = usage_params["first_byte_time_ms"]
+
+        # 更新请求头和请求体（如果有新值）
+        if usage_params["request_headers"] is not None:
+            existing_usage.request_headers = usage_params["request_headers"]
+        if usage_params["request_body"] is not None:
+            existing_usage.request_body = usage_params["request_body"]
+        if usage_params["provider_request_headers"] is not None:
+            existing_usage.provider_request_headers = usage_params["provider_request_headers"]
+        existing_usage.response_body = usage_params["response_body"]
+        existing_usage.response_headers = usage_params["response_headers"]
+
+        # 更新 token 和费用信息
+        existing_usage.input_tokens = usage_params["input_tokens"]
+        existing_usage.output_tokens = usage_params["output_tokens"]
+        existing_usage.total_tokens = usage_params["total_tokens"]
+        existing_usage.cache_creation_input_tokens = usage_params["cache_creation_input_tokens"]
+        existing_usage.cache_read_input_tokens = usage_params["cache_read_input_tokens"]
+        existing_usage.input_cost_usd = usage_params["input_cost_usd"]
+        existing_usage.output_cost_usd = usage_params["output_cost_usd"]
+        existing_usage.cache_cost_usd = usage_params["cache_cost_usd"]
+        existing_usage.cache_creation_cost_usd = usage_params["cache_creation_cost_usd"]
+        existing_usage.cache_read_cost_usd = usage_params["cache_read_cost_usd"]
+        existing_usage.request_cost_usd = usage_params["request_cost_usd"]
+        existing_usage.total_cost_usd = usage_params["total_cost_usd"]
+        existing_usage.actual_input_cost_usd = usage_params["actual_input_cost_usd"]
+        existing_usage.actual_output_cost_usd = usage_params["actual_output_cost_usd"]
+        existing_usage.actual_cache_creation_cost_usd = usage_params["actual_cache_creation_cost_usd"]
+        existing_usage.actual_cache_read_cost_usd = usage_params["actual_cache_read_cost_usd"]
+        existing_usage.actual_request_cost_usd = usage_params["actual_request_cost_usd"]
+        existing_usage.actual_total_cost_usd = usage_params["actual_total_cost_usd"]
+        existing_usage.rate_multiplier = usage_params["rate_multiplier"]
+
+        # 更新 Provider 侧追踪信息
+        existing_usage.provider_id = usage_params["provider_id"]
+        existing_usage.provider_endpoint_id = usage_params["provider_endpoint_id"]
+        existing_usage.provider_api_key_id = usage_params["provider_api_key_id"]
+
+        # 更新模型映射信息
+        if target_model is not None:
+            existing_usage.target_model = target_model
+
+    # ==================== 公开 API ====================
+
     @classmethod
     async def get_model_price_async(
         cls, db: Session, provider: str, model: str
@@ -157,233 +487,112 @@ class UsageService:
         api_format: Optional[str] = None,
         is_stream: bool = False,
         response_time_ms: Optional[int] = None,
-        first_byte_time_ms: Optional[int] = None,  # 首字时间 (TTFB)
+        first_byte_time_ms: Optional[int] = None,
         status_code: int = 200,
         error_message: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         request_headers: Optional[Dict[str, Any]] = None,
         request_body: Optional[Any] = None,
-        provider_request_headers: Optional[Dict[str, Any]] = None,  # 向提供商发送的请求头
+        provider_request_headers: Optional[Dict[str, Any]] = None,
         response_headers: Optional[Dict[str, Any]] = None,
         response_body: Optional[Any] = None,
-        request_id: Optional[str] = None,  # 请求ID，如果未提供则自动生成
-        # Provider 侧追踪信息（记录最终成功的 Provider/Endpoint/Key）
+        request_id: Optional[str] = None,
         provider_id: Optional[str] = None,
         provider_endpoint_id: Optional[str] = None,
         provider_api_key_id: Optional[str] = None,
-        # 请求状态 (pending, streaming, completed, failed)
         status: str = "completed",
-        # 阶梯计费相关参数
-        cache_ttl_minutes: Optional[int] = None,  # 缓存时长（用于 TTL 差异化定价）
-        use_tiered_pricing: bool = True,  # 是否使用阶梯计费（默认启用）
-        # 模型映射信息
-        target_model: Optional[str] = None,  # 映射后的目标模型名
+        cache_ttl_minutes: Optional[int] = None,
+        use_tiered_pricing: bool = True,
+        target_model: Optional[str] = None,
     ) -> Usage:
-        """异步记录使用量（支持阶梯计费）"""
+        """异步记录使用量（简化版，仅插入新记录）
 
-        # 使用传入的 request_id 或生成新的
+        此方法用于快速记录使用量，不更新用户/API Key 统计，不支持更新已存在的记录。
+        适用于不需要更新统计信息的场景。
+
+        如需完整功能（更新用户统计、支持更新已存在记录），请使用 record_usage()。
+        """
+        # 生成 request_id
         if request_id is None:
-            request_id = str(uuid.uuid4())[:8]  # 生成8位短ID以保持一致性
+            request_id = str(uuid.uuid4())[:8]
 
-        # 如果提供了 provider_api_key_id，从数据库查询 rate_multiplier
-        actual_rate_multiplier = 1.0  # 默认值
-        if provider_api_key_id:
-            provider_key = (
-                db.query(ProviderAPIKey).filter(ProviderAPIKey.id == provider_api_key_id).first()
-            )
-            if provider_key and provider_key.rate_multiplier:
-                actual_rate_multiplier = provider_key.rate_multiplier
-
-        # 失败的请求不应该计入按次计费费用
-        is_failed_request = status_code >= 400 or error_message is not None
-
-        # 获取模型价格信息（用于历史记录）
-        input_price, output_price = await cls.get_model_price_async(db, provider, model)
-        cache_creation_price, cache_read_price = await cls.get_cache_prices_async(
-            db, provider, model, input_price
+        # 获取费率倍数和是否免费套餐
+        actual_rate_multiplier, is_free_tier = await cls._get_rate_multiplier_and_free_tier(
+            db, provider_api_key_id, provider_id
         )
-        request_price = await cls.get_request_price_async(db, provider, model)
-        effective_request_price = None if is_failed_request else request_price
 
-        # 初始化成本变量（避免 `in locals()` 反模式）
-        input_cost = 0.0
-        output_cost = 0.0
-        cache_creation_cost = 0.0
-        cache_read_cost = 0.0
-        cache_cost = 0.0
-        request_cost = 0.0
-        total_cost = 0.0
-        tier_index = None
-
-        # 计算成本（支持阶梯计费）
-        if use_tiered_pricing:
-            # 使用策略模式计算成本（支持阶梯计费和 TTL 差异化）
-            (
-                input_cost,
-                output_cost,
-                cache_creation_cost,
-                cache_read_cost,
-                cache_cost,
-                request_cost,
-                total_cost,
-                tier_index,
-            ) = await cls.calculate_cost_with_strategy_async(
-                db=db,
-                provider=provider,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cache_creation_input_tokens=cache_creation_input_tokens,
-                cache_read_input_tokens=cache_read_input_tokens,
-                api_format=api_format,
-                cache_ttl_minutes=cache_ttl_minutes,
-            )
-            # 如果失败请求，重置按次费用
-            if is_failed_request:
-                total_cost = total_cost - request_cost
-                request_cost = 0.0
-        else:
-            # 使用固定价格模式
-            (
-                input_cost,
-                output_cost,
-                cache_creation_cost,
-                cache_read_cost,
-                cache_cost,
-                request_cost,
-                total_cost,
-            ) = cls.calculate_cost(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                input_price_per_1m=input_price,
-                output_price_per_1m=output_price,
-                cache_creation_input_tokens=cache_creation_input_tokens,
-                cache_read_input_tokens=cache_read_input_tokens,
-                cache_creation_price_per_1m=cache_creation_price,
-                cache_read_price_per_1m=cache_read_price,
-                price_per_request=effective_request_price,
-            )
-
-        # 根据配置决定是否记录请求详情
-        should_log_headers = SystemConfigService.should_log_headers(db)
-        should_log_body = SystemConfigService.should_log_body(db)
-
-        # 处理请求头（可能需要脱敏）
-        processed_request_headers = None
-        if should_log_headers and request_headers:
-            processed_request_headers = SystemConfigService.mask_sensitive_headers(
-                db, request_headers
-            )
-
-        # 处理提供商请求头（可能需要脱敏）
-        processed_provider_request_headers = None
-        if should_log_headers and provider_request_headers:
-            processed_provider_request_headers = SystemConfigService.mask_sensitive_headers(
-                db, provider_request_headers
-            )
-
-        # 处理请求体和响应体（可能需要截断）
-        processed_request_body = None
-        processed_response_body = None
-        if should_log_body:
-            if request_body:
-                processed_request_body = SystemConfigService.truncate_body(
-                    db, request_body, is_request=True
-                )
-            if response_body:
-                processed_response_body = SystemConfigService.truncate_body(
-                    db, response_body, is_request=False
-                )
-
-        # 处理响应头
-        processed_response_headers = None
-        if should_log_headers and response_headers:
-            processed_response_headers = SystemConfigService.mask_sensitive_headers(
-                db, response_headers
-            )
-
-        # 检查 Provider 的计费类型，免费套餐的实际费用为 0
-        is_free_tier = False
-        if provider_id:
-            provider_obj = db.query(Provider).filter(Provider.id == provider_id).first()
-            if provider_obj and provider_obj.billing_type == ProviderBillingType.FREE_TIER:
-                is_free_tier = True
-
-        # 计算真实成本（表面成本 × 倍率），免费套餐实际费用为 0
-        if is_free_tier:
-            actual_input_cost = 0.0
-            actual_output_cost = 0.0
-            actual_cache_creation_cost = 0.0
-            actual_cache_read_cost = 0.0
-            actual_request_cost = 0.0
-            actual_total_cost = 0.0
-        else:
-            actual_input_cost = input_cost * actual_rate_multiplier
-            actual_output_cost = output_cost * actual_rate_multiplier
-            actual_cache_creation_cost = cache_creation_cost * actual_rate_multiplier
-            actual_cache_read_cost = cache_read_cost * actual_rate_multiplier
-            actual_request_cost = request_cost * actual_rate_multiplier
-            actual_total_cost = total_cost * actual_rate_multiplier
-
-        # 记录使用量
-        usage = Usage(
-            user_id=user.id if user else None,
-            api_key_id=api_key.id if api_key else None,
-            request_id=request_id,
+        # 计算成本
+        is_failed_request = status_code >= 400 or error_message is not None
+        (
+            input_price, output_price, cache_creation_price, cache_read_price, request_price,
+            input_cost, output_cost, cache_creation_cost, cache_read_cost, cache_cost,
+            request_cost, total_cost, tier_index
+        ) = await cls._calculate_costs(
+            db=db,
             provider=provider,
             model=model,
-            target_model=target_model,  # 映射后的目标模型名
-            # Provider 侧追踪信息
-            provider_id=provider_id,
-            provider_endpoint_id=provider_endpoint_id,
-            provider_api_key_id=provider_api_key_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
             cache_creation_input_tokens=cache_creation_input_tokens,
             cache_read_input_tokens=cache_read_input_tokens,
-            input_cost_usd=input_cost,
-            output_cost_usd=output_cost,
-            cache_cost_usd=cache_cost,
-            cache_creation_cost_usd=cache_creation_cost,
-            cache_read_cost_usd=cache_read_cost,
-            request_cost_usd=request_cost,
-            total_cost_usd=total_cost,
-            # 真实成本（考虑倍率）
-            actual_input_cost_usd=actual_input_cost,
-            actual_output_cost_usd=actual_output_cost,
-            actual_cache_creation_cost_usd=actual_cache_creation_cost,
-            actual_cache_read_cost_usd=actual_cache_read_cost,
-            actual_request_cost_usd=actual_request_cost,
-            actual_total_cost_usd=actual_total_cost,
-            rate_multiplier=actual_rate_multiplier,  # 使用实际查询到的 rate_multiplier
-            # 添加历史价格信息
-            input_price_per_1m=input_price,
-            output_price_per_1m=output_price,
-            cache_creation_price_per_1m=cache_creation_price,
-            cache_read_price_per_1m=cache_read_price,
-            price_per_request=request_price,
+            api_format=api_format,
+            cache_ttl_minutes=cache_ttl_minutes,
+            use_tiered_pricing=use_tiered_pricing,
+            is_failed_request=is_failed_request,
+        )
+
+        # 构建 Usage 参数
+        usage_params = cls._build_usage_params(
+            db=db,
+            user=user,
+            api_key=api_key,
+            provider=provider,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
             request_type=request_type,
             api_format=api_format,
             is_stream=is_stream,
+            response_time_ms=response_time_ms,
+            first_byte_time_ms=first_byte_time_ms,
             status_code=status_code,
             error_message=error_message,
-            response_time_ms=response_time_ms,
-            first_byte_time_ms=first_byte_time_ms,  # 首字时间 (TTFB)
-            status=status,  # 请求状态追踪
-            request_metadata=metadata,
-            request_headers=processed_request_headers,
-            request_body=processed_request_body,
-            provider_request_headers=processed_provider_request_headers,
-            response_headers=processed_response_headers,
-            response_body=processed_response_body,
+            metadata=metadata,
+            request_headers=request_headers,
+            request_body=request_body,
+            provider_request_headers=provider_request_headers,
+            response_headers=response_headers,
+            response_body=response_body,
+            request_id=request_id,
+            provider_id=provider_id,
+            provider_endpoint_id=provider_endpoint_id,
+            provider_api_key_id=provider_api_key_id,
+            status=status,
+            target_model=target_model,
+            input_cost=input_cost,
+            output_cost=output_cost,
+            cache_creation_cost=cache_creation_cost,
+            cache_read_cost=cache_read_cost,
+            cache_cost=cache_cost,
+            request_cost=request_cost,
+            total_cost=total_cost,
+            input_price=input_price,
+            output_price=output_price,
+            cache_creation_price=cache_creation_price,
+            cache_read_price=cache_read_price,
+            request_price=request_price,
+            actual_rate_multiplier=actual_rate_multiplier,
+            is_free_tier=is_free_tier,
         )
 
+        # 创建 Usage 记录
+        usage = Usage(**usage_params)
         db.add(usage)
 
         # 更新 GlobalModel 使用计数（原子操作）
         from sqlalchemy import update
-
         from src.models.database import GlobalModel
 
         db.execute(
@@ -392,17 +601,16 @@ class UsageService:
             .values(usage_count=GlobalModel.usage_count + 1)
         )
 
-        # 更新 Provider 月度使用量（原子操作）- 使用实际费用（免费套餐为 0）
+        # 更新 Provider 月度使用量（原子操作）
         if provider_id:
+            actual_total_cost = usage_params["actual_total_cost_usd"]
             db.execute(
                 update(Provider)
                 .where(Provider.id == provider_id)
                 .values(monthly_used_usd=Provider.monthly_used_usd + actual_total_cost)
             )
 
-        db.commit()  # 立即提交事务,释放数据库锁
-        # 不需要 refresh，commit 后对象已经有数据库生成的值
-
+        db.commit()  # 立即提交事务，释放数据库锁
         return usage
 
     @classmethod
@@ -421,7 +629,7 @@ class UsageService:
         api_format: Optional[str] = None,
         is_stream: bool = False,
         response_time_ms: Optional[int] = None,
-        first_byte_time_ms: Optional[int] = None,  # 首字时间 (TTFB)
+        first_byte_time_ms: Optional[int] = None,
         status_code: int = 200,
         error_message: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -430,272 +638,113 @@ class UsageService:
         provider_request_headers: Optional[Dict[str, Any]] = None,
         response_headers: Optional[Dict[str, Any]] = None,
         response_body: Optional[Any] = None,
-        request_id: Optional[str] = None,  # 请求ID，如果未提供则自动生成
-        # Provider 侧追踪信息（记录最终成功的 Provider/Endpoint/Key）
+        request_id: Optional[str] = None,
         provider_id: Optional[str] = None,
         provider_endpoint_id: Optional[str] = None,
         provider_api_key_id: Optional[str] = None,
-        # 请求状态 (pending, streaming, completed, failed)
         status: str = "completed",
-        # 阶梯计费相关参数
-        cache_ttl_minutes: Optional[int] = None,  # 缓存时长（用于 TTL 差异化定价）
-        use_tiered_pricing: bool = True,  # 是否使用阶梯计费（默认启用）
-        # 模型映射信息
-        target_model: Optional[str] = None,  # 映射后的目标模型名
+        cache_ttl_minutes: Optional[int] = None,
+        use_tiered_pricing: bool = True,
+        target_model: Optional[str] = None,
     ) -> Usage:
-        """记录使用量（支持阶梯计费）"""
+        """记录使用量（完整版，支持更新已存在记录和用户统计）
 
-        # 使用传入的 request_id 或生成新的
+        此方法支持：
+        - 检查是否已存在相同 request_id 的记录（更新 vs 插入）
+        - 更新用户/API Key 使用统计
+        - 阶梯计费
+
+        如只需简单插入新记录，可使用 record_usage_async()。
+        """
+        # 生成 request_id
         if request_id is None:
-            request_id = str(uuid.uuid4())[:8]  # 生成8位短ID以保持一致性
+            request_id = str(uuid.uuid4())[:8]
 
-        # 如果提供了 provider_api_key_id，从数据库查询 rate_multiplier
-        actual_rate_multiplier = 1.0  # 默认值
-        if provider_api_key_id:
-            provider_key = (
-                db.query(ProviderAPIKey).filter(ProviderAPIKey.id == provider_api_key_id).first()
-            )
-            if provider_key and provider_key.rate_multiplier:
-                actual_rate_multiplier = provider_key.rate_multiplier
-
-        # 失败的请求不应该计入按次计费费用
-        is_failed_request = status_code >= 400 or error_message is not None
-
-        # 获取模型价格信息（用于历史记录）
-        input_price, output_price = await cls.get_model_price_async(db, provider, model)
-        cache_creation_price, cache_read_price = await cls.get_cache_prices_async(
-            db, provider, model, input_price
+        # 获取费率倍数和是否免费套餐
+        actual_rate_multiplier, is_free_tier = await cls._get_rate_multiplier_and_free_tier(
+            db, provider_api_key_id, provider_id
         )
-        request_price = await cls.get_request_price_async(db, provider, model)
-        effective_request_price = None if is_failed_request else request_price
 
-        # 初始化成本变量（避免 `in locals()` 反模式）
-        input_cost = 0.0
-        output_cost = 0.0
-        cache_creation_cost = 0.0
-        cache_read_cost = 0.0
-        cache_cost = 0.0
-        request_cost = 0.0
-        total_cost = 0.0
-
-        # 计算成本（支持阶梯计费）
-        if use_tiered_pricing:
-            # 使用策略模式计算成本（支持阶梯计费和 TTL 差异化）
-            (
-                input_cost,
-                output_cost,
-                cache_creation_cost,
-                cache_read_cost,
-                cache_cost,
-                request_cost,
-                total_cost,
-                _tier_index,
-            ) = await cls.calculate_cost_with_strategy_async(
-                db=db,
-                provider=provider,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cache_creation_input_tokens=cache_creation_input_tokens,
-                cache_read_input_tokens=cache_read_input_tokens,
-                api_format=api_format,
-                cache_ttl_minutes=cache_ttl_minutes,
-            )
-            # 如果失败请求，重置按次费用
-            if is_failed_request:
-                total_cost = total_cost - request_cost
-                request_cost = 0.0
-        else:
-            # 使用固定价格模式
-            (
-                input_cost,
-                output_cost,
-                cache_creation_cost,
-                cache_read_cost,
-                cache_cost,
-                request_cost,
-                total_cost,
-            ) = cls.calculate_cost(
-                input_tokens,
-                output_tokens,
-                input_price,
-                output_price,
-                cache_creation_input_tokens,
-                cache_read_input_tokens,
-                cache_creation_price,
-                cache_read_price,
-                effective_request_price,
-            )
-
-        # 根据配置决定是否记录请求详情
-        should_log_headers = SystemConfigService.should_log_headers(db)
-        should_log_body = SystemConfigService.should_log_body(db)
-
-        # 处理请求头（可能需要脱敏）
-        processed_request_headers = None
-        if should_log_headers and request_headers:
-            processed_request_headers = SystemConfigService.mask_sensitive_headers(
-                db, request_headers
-            )
-
-        # 处理提供商请求头（可能需要脱敏）
-        processed_provider_request_headers = None
-        if should_log_headers and provider_request_headers:
-            processed_provider_request_headers = SystemConfigService.mask_sensitive_headers(
-                db, provider_request_headers
-            )
-
-        # 处理请求体和响应体（可能需要截断）
-        processed_request_body = None
-        processed_response_body = None
-        if should_log_body:
-            if request_body:
-                processed_request_body = SystemConfigService.truncate_body(
-                    db, request_body, is_request=True
-                )
-            if response_body:
-                processed_response_body = SystemConfigService.truncate_body(
-                    db, response_body, is_request=False
-                )
-
-        # 处理响应头
-        processed_response_headers = None
-        if should_log_headers and response_headers:
-            processed_response_headers = SystemConfigService.mask_sensitive_headers(
-                db, response_headers
-            )
-
-        # 检查 Provider 的计费类型，免费套餐的实际费用为 0
-        is_free_tier = False
-        if provider_id:
-            provider_obj = db.query(Provider).filter(Provider.id == provider_id).first()
-            if provider_obj and provider_obj.billing_type == ProviderBillingType.FREE_TIER:
-                is_free_tier = True
-
-        # 计算真实成本（表面成本 × 倍率），免费套餐实际费用为 0
-        if is_free_tier:
-            actual_input_cost = 0.0
-            actual_output_cost = 0.0
-            actual_cache_creation_cost = 0.0
-            actual_cache_read_cost = 0.0
-            actual_request_cost = 0.0
-            actual_total_cost = 0.0
-        else:
-            actual_input_cost = input_cost * actual_rate_multiplier
-            actual_output_cost = output_cost * actual_rate_multiplier
-            actual_cache_creation_cost = cache_creation_cost * actual_rate_multiplier
-            actual_cache_read_cost = cache_read_cost * actual_rate_multiplier
-            actual_request_cost = request_cost * actual_rate_multiplier
-            actual_total_cost = total_cost * actual_rate_multiplier
-
-        # 创建使用记录
-        usage = Usage(
-            user_id=user.id if user else None,
-            api_key_id=api_key.id if api_key else None,
-            request_id=request_id,
+        # 计算成本
+        is_failed_request = status_code >= 400 or error_message is not None
+        (
+            input_price, output_price, cache_creation_price, cache_read_price, request_price,
+            input_cost, output_cost, cache_creation_cost, cache_read_cost, cache_cost,
+            request_cost, total_cost, _tier_index
+        ) = await cls._calculate_costs(
+            db=db,
             provider=provider,
             model=model,
-            target_model=target_model,  # 映射后的目标模型名
-            # Provider 侧追踪信息
-            provider_id=provider_id,
-            provider_endpoint_id=provider_endpoint_id,
-            provider_api_key_id=provider_api_key_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
             cache_creation_input_tokens=cache_creation_input_tokens,
             cache_read_input_tokens=cache_read_input_tokens,
-            input_cost_usd=input_cost,
-            output_cost_usd=output_cost,
-            cache_cost_usd=cache_cost,
-            cache_creation_cost_usd=cache_creation_cost,
-            cache_read_cost_usd=cache_read_cost,
-            request_cost_usd=request_cost,
-            total_cost_usd=total_cost,
-            # 真实成本（考虑倍率）
-            actual_input_cost_usd=actual_input_cost,
-            actual_output_cost_usd=actual_output_cost,
-            actual_cache_creation_cost_usd=actual_cache_creation_cost,
-            actual_cache_read_cost_usd=actual_cache_read_cost,
-            actual_request_cost_usd=actual_request_cost,
-            actual_total_cost_usd=actual_total_cost,
-            rate_multiplier=actual_rate_multiplier,  # 使用实际查询到的 rate_multiplier
-            # 添加历史价格信息
-            input_price_per_1m=input_price,
-            output_price_per_1m=output_price,
-            cache_creation_price_per_1m=cache_creation_price,
-            cache_read_price_per_1m=cache_read_price,
-            price_per_request=request_price,
+            api_format=api_format,
+            cache_ttl_minutes=cache_ttl_minutes,
+            use_tiered_pricing=use_tiered_pricing,
+            is_failed_request=is_failed_request,
+        )
+
+        # 构建 Usage 参数
+        usage_params = cls._build_usage_params(
+            db=db,
+            user=user,
+            api_key=api_key,
+            provider=provider,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
             request_type=request_type,
             api_format=api_format,
             is_stream=is_stream,
+            response_time_ms=response_time_ms,
+            first_byte_time_ms=first_byte_time_ms,
             status_code=status_code,
             error_message=error_message,
-            response_time_ms=response_time_ms,
-            first_byte_time_ms=first_byte_time_ms,  # 首字时间 (TTFB)
-            status=status,  # 请求状态追踪
-            request_metadata=metadata,
-            request_headers=processed_request_headers,
-            request_body=processed_request_body,
-            provider_request_headers=processed_provider_request_headers,
-            response_headers=processed_response_headers,
-            response_body=processed_response_body,
+            metadata=metadata,
+            request_headers=request_headers,
+            request_body=request_body,
+            provider_request_headers=provider_request_headers,
+            response_headers=response_headers,
+            response_body=response_body,
+            request_id=request_id,
+            provider_id=provider_id,
+            provider_endpoint_id=provider_endpoint_id,
+            provider_api_key_id=provider_api_key_id,
+            status=status,
+            target_model=target_model,
+            input_cost=input_cost,
+            output_cost=output_cost,
+            cache_creation_cost=cache_creation_cost,
+            cache_read_cost=cache_read_cost,
+            cache_cost=cache_cost,
+            request_cost=request_cost,
+            total_cost=total_cost,
+            input_price=input_price,
+            output_price=output_price,
+            cache_creation_price=cache_creation_price,
+            cache_read_price=cache_read_price,
+            request_price=request_price,
+            actual_rate_multiplier=actual_rate_multiplier,
+            is_free_tier=is_free_tier,
         )
 
-        # 检查是否已存在相同 request_id 的记录（用于更新 pending 记录或防止重试时重复插入）
+        # 检查是否已存在相同 request_id 的记录
         existing_usage = db.query(Usage).filter(Usage.request_id == request_id).first()
         if existing_usage:
-            # 已存在记录，更新而非插入
-            logger.debug(f"request_id {request_id} 已存在，更新现有记录 (status: {existing_usage.status} -> {status})")
-            # 更新关键字段
-            existing_usage.provider = provider  # 更新 provider 名称
-            existing_usage.status = status
-            existing_usage.status_code = status_code
-            existing_usage.error_message = error_message
-            existing_usage.response_time_ms = response_time_ms
-            existing_usage.first_byte_time_ms = first_byte_time_ms  # 更新首字时间
-            # 更新请求头和请求体（如果有新值）
-            if processed_request_headers is not None:
-                existing_usage.request_headers = processed_request_headers
-            if processed_request_body is not None:
-                existing_usage.request_body = processed_request_body
-            if processed_provider_request_headers is not None:
-                existing_usage.provider_request_headers = processed_provider_request_headers
-            existing_usage.response_body = processed_response_body
-            existing_usage.response_headers = processed_response_headers
-            # 更新 token 和费用信息
-            existing_usage.input_tokens = input_tokens
-            existing_usage.output_tokens = output_tokens
-            existing_usage.total_tokens = input_tokens + output_tokens
-            existing_usage.cache_creation_input_tokens = cache_creation_input_tokens
-            existing_usage.cache_read_input_tokens = cache_read_input_tokens
-            existing_usage.input_cost_usd = input_cost
-            existing_usage.output_cost_usd = output_cost
-            existing_usage.cache_cost_usd = cache_cost
-            existing_usage.cache_creation_cost_usd = cache_creation_cost
-            existing_usage.cache_read_cost_usd = cache_read_cost
-            existing_usage.request_cost_usd = request_cost
-            existing_usage.total_cost_usd = total_cost
-            existing_usage.actual_input_cost_usd = actual_input_cost
-            existing_usage.actual_output_cost_usd = actual_output_cost
-            existing_usage.actual_cache_creation_cost_usd = actual_cache_creation_cost
-            existing_usage.actual_cache_read_cost_usd = actual_cache_read_cost
-            existing_usage.actual_request_cost_usd = actual_request_cost
-            existing_usage.actual_total_cost_usd = actual_total_cost
-            existing_usage.rate_multiplier = actual_rate_multiplier
-            # 更新 Provider 侧追踪信息
-            existing_usage.provider_id = provider_id
-            existing_usage.provider_endpoint_id = provider_endpoint_id
-            existing_usage.provider_api_key_id = provider_api_key_id
-            # 更新模型映射信息
-            if target_model is not None:
-                existing_usage.target_model = target_model
-            # 不需要 db.add，已在会话中
+            logger.debug(
+                f"request_id {request_id} 已存在，更新现有记录 "
+                f"(status: {existing_usage.status} -> {status})"
+            )
+            cls._update_existing_usage(existing_usage, usage_params, target_model)
             usage = existing_usage
         else:
+            usage = Usage(**usage_params)
             db.add(usage)
 
-        # 确保 user 和 api_key 在会话中（如果存在）
+        # 确保 user 和 api_key 在会话中
         if user and not db.object_session(user):
             user = db.merge(user)
         if api_key and not db.object_session(api_key):
@@ -703,86 +752,69 @@ class UsageService:
 
         # 使用原子更新避免并发竞态条件
         from sqlalchemy import func, update
+        from src.models.database import ApiKey as ApiKeyModel, User as UserModel, GlobalModel
 
-        from src.models.database import ApiKey, User
-
-        # 更新用户使用量（原子操作）- 使用标准计费价格
-        # 独立Key不计入创建者的使用记录
+        # 更新用户使用量（独立 Key 不计入创建者的使用记录）
         if user and not (api_key and api_key.is_standalone):
             db.execute(
-                update(User)
-                .where(User.id == user.id)
+                update(UserModel)
+                .where(UserModel.id == user.id)
                 .values(
-                    used_usd=User.used_usd + total_cost,
-                    total_usd=User.total_usd + total_cost,
+                    used_usd=UserModel.used_usd + total_cost,
+                    total_usd=UserModel.total_usd + total_cost,
                     updated_at=func.now(),
                 )
             )
 
-        # 更新API密钥使用量（原子操作）- 使用标准计费价格
+        # 更新 API 密钥使用量
         if api_key:
-            # 独立余额Key需要扣除余额
             if api_key.is_standalone:
                 db.execute(
-                    update(ApiKey)
-                    .where(ApiKey.id == api_key.id)
+                    update(ApiKeyModel)
+                    .where(ApiKeyModel.id == api_key.id)
                     .values(
-                        total_requests=ApiKey.total_requests + 1,
-                        total_cost_usd=ApiKey.total_cost_usd + total_cost,
-                        balance_used_usd=ApiKey.balance_used_usd + total_cost,
+                        total_requests=ApiKeyModel.total_requests + 1,
+                        total_cost_usd=ApiKeyModel.total_cost_usd + total_cost,
+                        balance_used_usd=ApiKeyModel.balance_used_usd + total_cost,
                         last_used_at=func.now(),
                         updated_at=func.now(),
                     )
                 )
             else:
-                # 普通Key只更新统计信息，不扣除余额
                 db.execute(
-                    update(ApiKey)
-                    .where(ApiKey.id == api_key.id)
+                    update(ApiKeyModel)
+                    .where(ApiKeyModel.id == api_key.id)
                     .values(
-                        total_requests=ApiKey.total_requests + 1,
-                        total_cost_usd=ApiKey.total_cost_usd + total_cost,
+                        total_requests=ApiKeyModel.total_requests + 1,
+                        total_cost_usd=ApiKeyModel.total_cost_usd + total_cost,
                         last_used_at=func.now(),
                         updated_at=func.now(),
                     )
                 )
 
-        # 更新 GlobalModel 使用计数（原子操作）
-        from src.models.database import GlobalModel
-
+        # 更新 GlobalModel 使用计数
         db.execute(
             update(GlobalModel)
             .where(GlobalModel.name == model)
             .values(usage_count=GlobalModel.usage_count + 1)
         )
 
-        # 更新 Provider 月度使用量（原子操作）- 使用实际费用（免费套餐为 0）
+        # 更新 Provider 月度使用量
         if provider_id:
+            actual_total_cost = usage_params["actual_total_cost_usd"]
             db.execute(
                 update(Provider)
                 .where(Provider.id == provider_id)
                 .values(monthly_used_usd=Provider.monthly_used_usd + actual_total_cost)
             )
 
-        # 提交事务到数据库
+        # 提交事务
         try:
-            db.commit()  # 立即提交事务,释放数据库锁
-
-            # 使用 expire 标记对象过期，下次访问时自动重新加载（避免死锁）
-            # 不在热路径上立即 refresh，避免行锁等待
-            # db.expire(usage)
-            # if user:
-            #     db.expire(user)
-            # if api_key:
-            #     db.expire(api_key)
-
+            db.commit()
         except Exception as e:
             logger.error(f"提交使用记录时出错: {e}")
             db.rollback()
             raise
-
-        # 不再记录重复的性能日志和访问日志，因为已经在完成日志中输出了
-        # 这些信息都包含在 request_orchestrator.py 的完成日志中
 
         return usage
 

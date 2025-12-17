@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from src.core.logger import logger
 from src.database import get_db
 from src.models.database import AuditEventType, AuditLog
-from src.utils.transaction_manager import transactional
 
 
 
@@ -19,10 +18,13 @@ from src.utils.transaction_manager import transactional
 
 
 class AuditService:
-    """审计服务"""
+    """审计服务
+
+    事务策略：本服务不负责事务提交，由中间件统一管理。
+    所有方法只做 db.add/flush，提交由请求结束时的中间件处理。
+    """
 
     @staticmethod
-    @transactional(commit=False)  # 不自动提交，让调用方决定
     def log_event(
         db: Session,
         event_type: AuditEventType,
@@ -54,47 +56,44 @@ class AuditService:
 
         Returns:
             审计日志记录
+
+        Note:
+            不在此方法内提交事务，由调用方或中间件统一管理。
         """
-        try:
-            audit_log = AuditLog(
-                event_type=event_type.value,
-                description=description,
-                user_id=user_id,
-                api_key_id=api_key_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                request_id=request_id,
-                status_code=status_code,
-                error_message=error_message,
-                event_metadata=metadata,
-            )
+        audit_log = AuditLog(
+            event_type=event_type.value,
+            description=description,
+            user_id=user_id,
+            api_key_id=api_key_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+            status_code=status_code,
+            error_message=error_message,
+            event_metadata=metadata,
+        )
 
-            db.add(audit_log)
-            db.commit()  # 立即提交事务,释放数据库锁
-            db.refresh(audit_log)
+        db.add(audit_log)
+        # 使用 flush 使记录可见但不提交事务，事务由中间件统一管理
+        db.flush()
 
-            # 同时记录到系统日志
-            log_message = (
-                f"AUDIT [{event_type.value}] - {description} | "
-                f"user_id={user_id}, ip={ip_address}"
-            )
+        # 同时记录到系统日志
+        log_message = (
+            f"AUDIT [{event_type.value}] - {description} | "
+            f"user_id={user_id}, ip={ip_address}"
+        )
 
-            if event_type in [
-                AuditEventType.UNAUTHORIZED_ACCESS,
-                AuditEventType.SUSPICIOUS_ACTIVITY,
-            ]:
-                logger.warning(log_message)
-            elif event_type in [AuditEventType.LOGIN_FAILED, AuditEventType.REQUEST_FAILED]:
-                logger.info(log_message)
-            else:
-                logger.debug(log_message)
+        if event_type in [
+            AuditEventType.UNAUTHORIZED_ACCESS,
+            AuditEventType.SUSPICIOUS_ACTIVITY,
+        ]:
+            logger.warning(log_message)
+        elif event_type in [AuditEventType.LOGIN_FAILED, AuditEventType.REQUEST_FAILED]:
+            logger.info(log_message)
+        else:
+            logger.debug(log_message)
 
-            return audit_log
-
-        except Exception as e:
-            logger.error(f"Failed to log audit event: {e}")
-            db.rollback()
-            return None
+        return audit_log
 
     @staticmethod
     def log_login_attempt(
