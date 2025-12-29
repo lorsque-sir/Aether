@@ -224,3 +224,5 @@ extracted_*.ts
 .deps-hash
 .code-hash
 .migration-hash
+
+.spec-workflow
