@@ -118,7 +118,9 @@ class AdminDashboardStatsAdapter(AdminApiAdapter):
         # 转换为 UTC 用于与 stats_daily.date 比较（存储的是业务日期对应的 UTC 开始时间）
         today = today_local.astimezone(timezone.utc)
         yesterday = (today_local - timedelta(days=1)).astimezone(timezone.utc)
-        last_month = (today_local - timedelta(days=30)).astimezone(timezone.utc)
+        # 本月第一天（自然月）
+        month_start_local = today_local.replace(day=1)
+        month_start = month_start_local.astimezone(timezone.utc)
 
         # ==================== 使用预聚合数据 ====================
         # 从 stats_summary + 今日实时数据获取全局统计
@@ -208,7 +210,7 @@ class AdminDashboardStatsAdapter(AdminApiAdapter):
                 func.sum(StatsDaily.cache_read_cost).label("cache_read_cost"),
                 func.sum(StatsDaily.fallback_count).label("fallback_count"),
             )
-            .filter(StatsDaily.date >= last_month, StatsDaily.date < today)
+            .filter(StatsDaily.date >= month_start, StatsDaily.date < today)
             .first()
         )
 
@@ -227,24 +229,24 @@ class AdminDashboardStatsAdapter(AdminApiAdapter):
         else:
             # 回退到实时查询（没有预聚合数据时）
             total_requests = (
-                db.query(func.count(Usage.id)).filter(Usage.created_at >= last_month).scalar() or 0
+                db.query(func.count(Usage.id)).filter(Usage.created_at >= month_start).scalar() or 0
             )
             total_cost = (
-                db.query(func.sum(Usage.total_cost_usd)).filter(Usage.created_at >= last_month).scalar() or 0
+                db.query(func.sum(Usage.total_cost_usd)).filter(Usage.created_at >= month_start).scalar() or 0
             )
             total_actual_cost = (
                 db.query(func.sum(Usage.actual_total_cost_usd))
-                .filter(Usage.created_at >= last_month).scalar() or 0
+                .filter(Usage.created_at >= month_start).scalar() or 0
             )
             error_requests = (
                 db.query(func.count(Usage.id))
                 .filter(
-                    Usage.created_at >= last_month,
+                    Usage.created_at >= month_start,
                     (Usage.status_code >= 400) | (Usage.error_message.isnot(None)),
                 ).scalar() or 0
             )
             total_tokens = (
-                db.query(func.sum(Usage.total_tokens)).filter(Usage.created_at >= last_month).scalar() or 0
+                db.query(func.sum(Usage.total_tokens)).filter(Usage.created_at >= month_start).scalar() or 0
             )
             cache_stats = (
                 db.query(
@@ -253,7 +255,7 @@ class AdminDashboardStatsAdapter(AdminApiAdapter):
                     func.sum(Usage.cache_creation_cost_usd).label("cache_creation_cost"),
                     func.sum(Usage.cache_read_cost_usd).label("cache_read_cost"),
                 )
-                .filter(Usage.created_at >= last_month)
+                .filter(Usage.created_at >= month_start)
                 .first()
             )
             cache_creation_tokens = int(cache_stats.cache_creation_tokens or 0) if cache_stats else 0
@@ -267,7 +269,7 @@ class AdminDashboardStatsAdapter(AdminApiAdapter):
                     RequestCandidate.request_id, func.count(RequestCandidate.id).label("executed_count")
                 )
                 .filter(
-                    RequestCandidate.created_at >= last_month,
+                    RequestCandidate.created_at >= month_start,
                     RequestCandidate.status.in_(["success", "failed"]),
                 )
                 .group_by(RequestCandidate.request_id)
@@ -447,7 +449,9 @@ class UserDashboardStatsAdapter(DashboardAdapter):
         # 转换为 UTC 用于数据库查询
         today = today_local.astimezone(timezone.utc)
         yesterday = (today_local - timedelta(days=1)).astimezone(timezone.utc)
-        last_month = (today_local - timedelta(days=30)).astimezone(timezone.utc)
+        # 本月第一天（自然月）
+        month_start_local = today_local.replace(day=1)
+        month_start = month_start_local.astimezone(timezone.utc)
 
         user_api_keys = db.query(func.count(ApiKey.id)).filter(ApiKey.user_id == user.id).scalar()
         active_keys = (
@@ -483,12 +487,12 @@ class UserDashboardStatsAdapter(DashboardAdapter):
         # 本月请求统计
         user_requests = (
             db.query(func.count(Usage.id))
-            .filter(and_(Usage.user_id == user.id, Usage.created_at >= last_month))
+            .filter(and_(Usage.user_id == user.id, Usage.created_at >= month_start))
             .scalar()
         )
         user_cost = (
             db.query(func.sum(Usage.total_cost_usd))
-            .filter(and_(Usage.user_id == user.id, Usage.created_at >= last_month))
+            .filter(and_(Usage.user_id == user.id, Usage.created_at >= month_start))
             .scalar()
             or 0
         )
@@ -532,7 +536,7 @@ class UserDashboardStatsAdapter(DashboardAdapter):
                 func.sum(Usage.cache_read_input_tokens).label("cache_read_tokens"),
                 func.sum(Usage.input_tokens).label("total_input_tokens"),
             )
-            .filter(and_(Usage.user_id == user.id, Usage.created_at >= last_month))
+            .filter(and_(Usage.user_id == user.id, Usage.created_at >= month_start))
             .first()
         )
         cache_creation_tokens = int(cache_stats.cache_creation_tokens or 0) if cache_stats else 0

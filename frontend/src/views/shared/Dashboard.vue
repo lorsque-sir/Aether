@@ -145,10 +145,10 @@
               <DollarSign class="absolute top-3 right-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
               <div class="pr-6">
                 <p class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-muted-foreground">
-                  实际成本
+                  本月费用
                 </p>
                 <p class="mt-1.5 sm:mt-2 text-lg sm:text-xl font-semibold text-foreground">
-                  {{ formatCurrency(costStats.total_actual_cost) }}
+                  {{ formatCurrency(costStats.total_cost) }}
                 </p>
                 <Badge
                   v-if="costStats.cost_savings > 0"
